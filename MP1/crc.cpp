@@ -11,14 +11,12 @@
 #include <string.h>
 #include "interface.h"
 
-
-
 int connect_to(const char *host, const int port);
 struct Reply process_command(const int sockfd, char* command);
 void process_chatmode(const char* host, const int port);
 
-char* DEFAULT_HOST = "127.0.0.1";
-char* DEFAULT_PORT = "8080";
+char DEFAULT_HOST[] = "127.0.0.1";
+char DEFAULT_PORT[] = "8080";
 
 int main(int argc, char** argv) 
 {
@@ -225,7 +223,7 @@ void process_chatmode(const char* host, const int port)
 		// Listen for new information on socket or new input from user
 		FD_ZERO(&readfds);
   		FD_SET(sockfd, &readfds);
-  		FD_SET (STDIN_FILENO, &readfds);
+  		FD_SET(STDIN_FILENO, &readfds);
 
 		select(sockfd + 1, &readfds, NULL, NULL, NULL);
 
