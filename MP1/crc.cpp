@@ -12,20 +12,29 @@
 #include "interface.h"
 
 
+
 int connect_to(const char *host, const int port);
 struct Reply process_command(const int sockfd, char* command);
 void process_chatmode(const char* host, const int port);
 
+char* DEFAULT_HOST = "127.0.0.1";
+char* DEFAULT_PORT = "8080";
+
 int main(int argc, char** argv) 
 {
 	if (argc != 3) {
-		LOG(ERROR) << "USAGE: Enter host address and port number";
-		exit(1);
+		// LOG(ERROR) << "USAGE: Enter host address and port number";
+		// exit(1);
+		LOG(INFO) << "Using default host address " << DEFAULT_HOST << " and port number " << DEFAULT_PORT;
+		// Set args to default values
+		argv[1] = DEFAULT_HOST;
+		argv[2] = DEFAULT_PORT;
 	}
 
 	// Change log location to a dedicated folder
     FLAGS_log_dir = "./logs/";
     // Also log to the terminal
+	FLAGS_alsologtostderr = 1;
 	google::InitGoogleLogging(argv[0]);
 
     display_title();
