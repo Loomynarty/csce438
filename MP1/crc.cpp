@@ -45,6 +45,7 @@ int main(int argc, char** argv)
         get_command(command, MAX_DATA);
 
 		struct Reply reply = process_command(sockfd, command);
+
 		display_reply(command, reply);
 		
 		if(reply.status == SUCCESS){
@@ -146,6 +147,7 @@ struct Reply process_command(const int sockfd, char* command)
 	// ------------------------------------------------------------
 	// send message to the server and receive a result.
 	// ------------------------------------------------------------
+
 	char response_string[MAX_DATA];
 	if (recv(sockfd, response_string, MAX_DATA, 0) < 0)
 	{
@@ -192,7 +194,6 @@ struct Reply process_command(const int sockfd, char* command)
     // "list" is a string that contains a list of chat rooms such 
     // as "r1,r2,r3,"
 	// ------------------------------------------------------------
-
 	return *(Reply*) response_string;
 }
 

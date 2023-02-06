@@ -5,15 +5,110 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/time.h>
+#include <pthread.h>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "interface.h"
 
-const int PORT = 8080;
+struct client_info {
+    int fd;
+    int port;
+    struct sockaddr_in addr;
+};
+
+Reply handle_create(char* buffer, int fd) {
+    LOG(INFO) << "Create command received";
+
+    // Create reply and send
+    Reply reply;
+    reply.status = SUCCESS;
+
+    return reply;
+}
+
+Reply handle_delete(char* buffer, int fd) {
+    LOG(INFO) << "Delete command received";
+    // Create reply and send
+    Reply reply;
+    reply.status = SUCCESS;
+    
+    return reply;
+}
+
+Reply handle_join(char* buffer, int fd) {
+    LOG(INFO) << "Join command received";
+    // Create reply and send
+    Reply reply;
+    reply.status = SUCCESS;
+    
+    return reply;
+}
+
+
+Reply handle_list(char* buffer, int fd) {
+    LOG(INFO) << "List command received";
+    // Create reply and send
+    Reply reply;
+    reply.status = SUCCESS;
+    
+    return reply;
+}
+
+void parse_command(char* buffer, int fd) {
+    LOG(INFO) << "parse_command buffer: " << buffer;
+
+    Reply reply;
+
+    if (strncmp(buffer, "CREATE", 6) == 0){
+        reply = handle_create(buffer, fd);
+    } 
+    else if (strncmp(buffer, "DELETE", 6) == 0){
+        reply = handle_delete(buffer, fd);
+    } 
+    else if (strncmp(buffer, "JOIN", 4) == 0){
+        reply = handle_join(buffer, fd);
+    } 
+    else if (strncmp(buffer, "LIST", 4) == 0){
+        reply = handle_list(buffer, fd);
+    }
+    else {
+        reply.status = FAILURE_INVALID;
+    }
+
+    char resp[MAX_DATA];
+    // copy reply into response
+    memcpy(resp, (void*) &reply, sizeof(reply));
+    // send the response
+    if (send(fd, resp, MAX_DATA, 0) < 0)
+    {
+        LOG(ERROR) << "ERROR: send failed";
+        exit(EXIT_FAILURE);		
+    }
+}
+
+void* handle_connection(void* fd) {
+    // Extract info
+    int client_fd = *(int*) fd;
+    char buffer[MAX_DATA];
+
+    // Receive commands from client
+    int code;
+    if (recv(client_fd, buffer, MAX_DATA, 0) < 0) {
+        LOG(ERROR) << "ERROR: recv failed";
+    }
+
+    // Parse command
+    parse_command(buffer, client_fd);
+
+    return fd;
+}
 
 int main(int argc, char *argv[]){
+    // Default port
+    const int PORT = 8080;
+
     // Change log location to a dedicated folder
     FLAGS_log_dir = "./logs/";
     // Also log to the terminal
@@ -57,12 +152,15 @@ int main(int argc, char *argv[]){
         struct sockaddr_in client_addr;
         int client_size = sizeof(struct sockaddr_in);
 
-        if (client_fd = accept(control_fd, (struct sockaddr*) &client_addr, (socklen_t*) &client_size) < 0) {
+        if ((client_fd = accept(control_fd, (struct sockaddr*) &client_addr, (socklen_t*) &client_size)) < 0) {
             LOG(ERROR) << "ERROR: accept failed";
             continue;
         }
 
-        LOG(INFO) << "Client accepted";
+        LOG(INFO) << "Client accepted: " << client_fd;
+
+        pthread_t handler_thread;
+        pthread_create(&handler_thread, NULL, handle_connection, &client_fd);
     }
 }
 
