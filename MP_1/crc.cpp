@@ -30,16 +30,16 @@ int main(int argc, char** argv)
 	}
 
 	// Change log location to a dedicated folder
-    FLAGS_log_dir = "./logs/";
+    FLAGS_log_dir = "../logs/";
     // Also log to the terminal
 	FLAGS_alsologtostderr = 1;
 	google::InitGoogleLogging(argv[0]);
 
     display_title();
     
+	int sockfd = connect_to(argv[1], atoi(argv[2]));
 	while (1) {
-	
-		int sockfd = connect_to(argv[1], atoi(argv[2]));
+		
     
 		char command[MAX_DATA];
         get_command(command, MAX_DATA);
@@ -53,10 +53,10 @@ int main(int argc, char** argv)
 			if (strncmp(command, "JOIN", 4) == 0) {
 				printf("Now you are in the chatmode\n");
 				process_chatmode(argv[1], reply.port);
+				close(sockfd);
 			}
 		}
 	
-		close(sockfd);
     }
 
     return 0;

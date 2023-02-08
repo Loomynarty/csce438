@@ -12,6 +12,8 @@
 #include <string.h>
 #include "interface.h"
 
+int num_clients = 0;
+
 struct client_info {
     int fd;
     int port;
@@ -57,9 +59,10 @@ Reply handle_list(char* buffer, int fd) {
 }
 
 void parse_command(char* buffer, int fd) {
-    LOG(INFO) << "parse_command buffer: " << buffer;
-
     Reply reply;
+    char resp[MAX_DATA];
+
+    LOG(INFO) << "parse_command buffer: " << buffer;
 
     if (strncmp(buffer, "CREATE", 6) == 0){
         reply = handle_create(buffer, fd);
@@ -77,7 +80,6 @@ void parse_command(char* buffer, int fd) {
         reply.status = FAILURE_INVALID;
     }
 
-    char resp[MAX_DATA];
     // copy reply into response
     memcpy(resp, (void*) &reply, sizeof(reply));
     // send the response
@@ -89,33 +91,45 @@ void parse_command(char* buffer, int fd) {
 }
 
 void* handle_connection(void* fd) {
-    // Extract info
-    int client_fd = *(int*) fd;
+    int bytes;
     char buffer[MAX_DATA];
+    int client_fd = *(int*) fd;
 
     // Receive commands from client
-    int code;
-    if (recv(client_fd, buffer, MAX_DATA, 0) < 0) {
-        LOG(ERROR) << "ERROR: recv failed";
+    while (true) {
+        bytes = (recv(client_fd, buffer, MAX_DATA, 0));
+        
+        if (bytes <= 0) {
+            //LOG(INFO) << "Client " << client_fd << " aborted";
+            break;
+        }
+
+        // Parse command
+        parse_command(buffer, client_fd);
+
     }
 
-    // Parse command
-    parse_command(buffer, client_fd);
-
-    return fd;
+    // broke out of loop -- close the client socket
+    LOG(INFO) << "Client " << client_fd << " connection terminated";
+    close(client_fd);
+    num_clients--;
+    return NULL;
 }
 
-int main(int argc, char *argv[]){
+int main(int argc, char *argv[]) {
     // Default port
-    const int PORT = 8080;
+    int port = 8080;
+    if (argc > 1) {
+        port = atoi(argv[1]);
+    }
 
     // Change log location to a dedicated folder
-    FLAGS_log_dir = "./logs/";
+    FLAGS_log_dir = "../logs/";
     // Also log to the terminal
     FLAGS_alsologtostderr = 1;
     google::InitGoogleLogging(argv[0]);
 
-    LOG(INFO) << "Starting Server";
+    LOG(INFO) << "Starting server on port " << port;
 
     // initialize control socket
     struct sockaddr_in control_addr;
@@ -128,9 +142,16 @@ int main(int argc, char *argv[]){
         exit(EXIT_FAILURE);
     }
 
+    const int enable = 1;
+    // set socket to allow reuse
+    if (setsockopt(control_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &enable, sizeof(int)) < 0) {
+        LOG(ERROR) << "ERROR: setsockopt failed";
+        exit(EXIT_FAILURE);
+    }
+
     control_addr.sin_family = AF_INET;
     control_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    control_addr.sin_port = htons(PORT);
+    control_addr.sin_port = htons(port);
 
     // bind the socket
     if (bind(control_fd, (struct sockaddr*) &control_addr, sizeof(control_addr)) < 0) {
@@ -158,9 +179,12 @@ int main(int argc, char *argv[]){
         }
 
         LOG(INFO) << "Client accepted: " << client_fd;
+        num_clients++;
+        LOG(INFO) << "Current number of clients: " << num_clients;
 
         pthread_t handler_thread;
-        pthread_create(&handler_thread, NULL, handle_connection, &client_fd);
+        pthread_create(&handler_thread, NULL, &handle_connection, &client_fd);
     }
+    close(control_fd);
 }
 
