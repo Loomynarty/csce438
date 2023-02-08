@@ -12,21 +12,158 @@
 #include <string.h>
 #include "interface.h"
 
+// Default port
+int port = 8080;
 int num_clients = 0;
+std::vector<Room*> room_db;
+pthread_mutex_t room_mtx = PTHREAD_MUTEX_INITIALIZER;
 
-struct client_info {
-    int fd;
-    int port;
-    struct sockaddr_in addr;
-};
+void room_message(Room* room, char* message, int sender_index) {
+    pthread_mutex_lock(&room->chat_mtx);
 
-Reply handle_create(char* buffer, int fd) {
+    for(int i = 0; i < room->member_count; i++) {
+        if (i == sender_index) {
+            continue;
+        }
+        if (send(room->client_sockets.at(i), message, MAX_DATA, 0) < 0) {
+            LOG(ERROR) << "Chat message failed to send";
+        }
+    }
+
+    pthread_mutex_unlock(&room->chat_mtx);
+}
+
+void* room_client_listener(void* arg) {
+    Room* room = (Room*) arg;
+    char buff[MAX_DATA];
+    int client_index = room->member_count - 1;
+    int client_socket = room->client_sockets.at(client_index);
+
+    LOG(INFO) << "Client listening on room " << room->name;
+
+    while (recv(client_socket, &buff, MAX_DATA, 0) > 0) {
+        // Send the message to every other client
+        room_message(room, buff, client_index);
+    }
+
+    // TODO: implement checks for client exitting
+    // close(client_socket);
+    return NULL;
+}
+
+void* room_master_listener(void* arg) {
+    Room* room = (Room*) arg;
+
+    // listen socket
+    if (listen(room->master_socket, MAX_MEMBER) < 0) {
+        LOG(ERROR) << "ERROR: room could not listen on socket";
+        exit(EXIT_FAILURE);
+    }
+
+    LOG(INFO) << "Room " << room->name << " ready for connections";
+
+    int client_fd;
+    struct sockaddr_in client_addr;
+    int client_size = sizeof(struct sockaddr_in);
+    while (true) {
+        // accept a client
+        if ((client_fd = accept(room->master_socket, (struct sockaddr*) &client_addr, (socklen_t*) &client_size)) < 0) {
+            LOG(ERROR) << "ERROR: accept failed";
+            continue;
+        }
+
+        LOG(INFO) << "Room " << room->name << " accepted client: " << client_fd;
+
+        pthread_mutex_lock(&room_mtx);
+        room->member_count++;
+
+        room->client_sockets.push_back(client_fd);
+        pthread_mutex_unlock(&room_mtx);
+
+        LOG(INFO) << "Current number of room clients: " << room->member_count;
+
+        pthread_t handler_thread;
+        pthread_create(&handler_thread, NULL, &room_client_listener, &room);
+    }
+
+    return NULL;
+}
+
+Reply handle_create(char* buffer) {
     LOG(INFO) << "Create command received";
-
-    // Create reply and send
+    // Create reply
     Reply reply;
     reply.status = SUCCESS;
 
+    // Get the name from the buffer
+    std::vector<char*> split_buffer = split(buffer, " ");
+    if (split_buffer.size() < 2) {
+        reply.status = FAILURE_INVALID;
+        return reply;
+    }
+
+    char* name = split_buffer.at(1);
+
+    // check if room is already created
+    pthread_mutex_lock(&room_mtx);
+    for (int i = 0; i < room_db.size(); i++) {
+        if (strcmp(name, room_db[i]->name) == 0) {
+            // Found a match -- return already exists
+            pthread_mutex_unlock(&room_mtx);
+            reply.status = FAILURE_ALREADY_EXISTS;
+            return reply;
+        }
+    }
+    pthread_mutex_unlock(&room_mtx);
+
+    // open new master socket for the room
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+
+    // create socket
+    int fd;
+    if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        LOG(ERROR) << "ERROR: could not open socket";
+        exit(EXIT_FAILURE);
+    }
+
+    const int enable = 1;
+    // set socket to allow reuse
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &enable, sizeof(int)) < 0) {
+        LOG(ERROR) << "ERROR: setsockopt failed";
+        exit(EXIT_FAILURE);
+    }
+
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr.sin_port = htons(port); 
+
+    // bind the socket
+    if (bind(fd, (struct sockaddr*) &addr, sizeof(addr)) < 0) {
+        LOG(ERROR) << "ERROR: could not bind socket";
+        exit(EXIT_FAILURE);
+    }
+
+    // Create a new room
+    pthread_mutex_lock(&room_mtx);
+
+    Room* new_room = (Room*) malloc(sizeof(Room));
+    strcpy(new_room->name, name);
+    new_room->member_count = 0;
+    new_room->port = ++port;
+    new_room->index = room_db.size();
+    new_room->master_socket = fd;
+    pthread_mutex_init(&new_room->chat_mtx, NULL);
+    room_db.push_back(new_room);
+
+    pthread_mutex_unlock(&room_mtx);
+
+    LOG(INFO) << "Room " << new_room->name << " created successfully";
+    // Create a thread to listen and accept connections for the room
+    pthread_t thread;
+    pthread_create(&thread, NULL, &room_master_listener, new_room);
+
+    
     return reply;
 }
 
@@ -54,7 +191,17 @@ Reply handle_list(char* buffer, int fd) {
     // Create reply and send
     Reply reply;
     reply.status = SUCCESS;
-    
+    if (room_db.empty()) {
+        strcpy(reply.list_room, "empty");
+        return reply;
+    }
+
+    char list[MAX_DATA] = "";
+    for (auto room : room_db) {
+        strcat(list, room->name);
+        strcat(list, ",");
+    }
+    strcpy(reply.list_room, list);
     return reply;
 }
 
@@ -62,10 +209,10 @@ void parse_command(char* buffer, int fd) {
     Reply reply;
     char resp[MAX_DATA];
 
-    LOG(INFO) << "parse_command buffer: " << buffer;
+    // LOG(INFO) << "parse_command buffer: " << buffer;
 
     if (strncmp(buffer, "CREATE", 6) == 0){
-        reply = handle_create(buffer, fd);
+        reply = handle_create(buffer);
     } 
     else if (strncmp(buffer, "DELETE", 6) == 0){
         reply = handle_delete(buffer, fd);
@@ -77,6 +224,7 @@ void parse_command(char* buffer, int fd) {
         reply = handle_list(buffer, fd);
     }
     else {
+        LOG(INFO) << "Received invalid command";
         reply.status = FAILURE_INVALID;
     }
 
@@ -100,7 +248,6 @@ void* handle_connection(void* fd) {
         bytes = (recv(client_fd, buffer, MAX_DATA, 0));
         
         if (bytes <= 0) {
-            //LOG(INFO) << "Client " << client_fd << " aborted";
             break;
         }
 
@@ -117,8 +264,7 @@ void* handle_connection(void* fd) {
 }
 
 int main(int argc, char *argv[]) {
-    // Default port
-    int port = 8080;
+    
     if (argc > 1) {
         port = atoi(argv[1]);
     }
@@ -160,7 +306,7 @@ int main(int argc, char *argv[]) {
     }
 
     // listen socket
-    if (listen(control_fd, 5) < 0) {
+    if (listen(control_fd, 100) < 0) {
         LOG(ERROR) << "ERROR: could not listen on socket";
         exit(EXIT_FAILURE);
     }

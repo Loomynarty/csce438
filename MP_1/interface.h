@@ -11,9 +11,30 @@
 #ifndef INTERFACE_H_
 #define INTERFACE_H_
 #include <ctype.h>
+#include <vector>
 
 // maximum size of data for the communication using TCP/IP
 #define MAX_DATA 256
+
+// maximum number of rooms
+#define MAX_ROOM 10
+
+// maximum number of members in a single chat room
+#define MAX_MEMBER 10
+
+// Chat room structure
+struct Room {
+    char name[MAX_DATA];
+    std::vector<int> client_sockets;
+    struct sockaddr_in addr;
+    // port of the room
+    int port; 
+    int member_count;
+    // index in local database
+    int index; 
+    int master_socket;
+    pthread_mutex_t chat_mtx;
+};
 
 /*
  * This enum represents the result of a command.
@@ -160,6 +181,16 @@ void display_reply(char* comm, const struct Reply reply)
             printf("Invalid status\n");
             break;
     }
+}
+
+std::vector<char*> split(char* str, const char* delimiter) {
+    std::vector<char*> ret;
+    char* token = strtok(str, " ");
+    while (token != NULL){
+        ret.push_back(token);
+        token = strtok(NULL, " ");
+    }
+    return ret;
 }
 
 #endif // INTERFACE_H_
