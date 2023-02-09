@@ -15,3 +15,7 @@ make
 // Server runs on port 8080
 
 ./server 8080
+
+### Logging
+
+The default log folder is logs/ 
