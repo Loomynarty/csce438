@@ -42,7 +42,7 @@ struct Room {
     int port; 
     int member_count;
     int master_socket;
-    pthread_t client_listener;
+    std::vector<pthread_t> threads;
     pthread_mutex_t mtx;
 };
 

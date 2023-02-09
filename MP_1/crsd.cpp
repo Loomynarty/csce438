@@ -142,7 +142,7 @@ void* room_master_listener(void* arg) {
 
         pthread_t handler_thread;
         pthread_create(&handler_thread, NULL, &room_client_listener, (void*) &data);
-        room->client_listener = handler_thread;
+        room->threads.push_back(handler_thread);
     }
 
     return NULL;
@@ -252,9 +252,11 @@ Reply handle_delete(char* buffer) {
 
     // Delete the room and free memory allocated
     delete room->client_sockets;
-    pthread_cancel(room->client_listener);
+    for (auto thread : room->threads) {
+        pthread_cancel(thread);
+    }
     pthread_mutex_unlock(&room->mtx);
-    
+
     delete_room(name);
     free(room);
 
@@ -282,7 +284,7 @@ Reply handle_join(char* buffer) {
         return reply;
     }
 
-    reply.num_member = room->member_count;
+    reply.num_member = room->member_count + 1;
     reply.port = room->port;
 
     return reply;
