@@ -12,6 +12,8 @@
 #define INTERFACE_H_
 #include <ctype.h>
 #include <vector>
+#include <list>
+#include <pthread.h>
 
 // maximum size of data for the communication using TCP/IP
 #define MAX_DATA 256
@@ -22,18 +24,26 @@
 // maximum number of members in a single chat room
 #define MAX_MEMBER 10
 
+// 
+#define CLOSE_MESSAGE "Warning: the chat room is going to be closed..."
+
+// Room/Client struct for passing data to thread
+struct room_listener_t {
+    char name[MAX_DATA];
+    int client_fd;
+};
+
 // Chat room structure
 struct Room {
     char name[MAX_DATA];
-    std::vector<int> client_sockets;
+    std::list<int>* client_sockets;
     struct sockaddr_in addr;
     // port of the room
     int port; 
     int member_count;
-    // index in local database
-    int index; 
     int master_socket;
-    pthread_mutex_t chat_mtx;
+    pthread_t client_listener;
+    pthread_mutex_t mtx;
 };
 
 /*

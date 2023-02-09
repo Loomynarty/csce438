@@ -53,11 +53,12 @@ int main(int argc, char** argv)
 			if (strncmp(command, "JOIN", 4) == 0) {
 				printf("Now you are in the chatmode\n");
 				process_chatmode(argv[1], reply.port);
-				close(sockfd);
+				break;
 			}
 		}
 	
     }
+	close(sockfd);
 
     return 0;
 }
@@ -104,7 +105,7 @@ int connect_to(const char *host, const int port)
 	// connect to host on the specified port using the server_addr struct
 	if (connect(sockfd, (struct sockaddr*) &server_addr, sizeof(server_addr)) < 0)
 	{
-		LOG(ERROR) << "ERROR: could not connect to server";
+		LOG(ERROR) << "ERROR: could not connect to server " << sockfd;
 		exit(EXIT_FAILURE);
 	}
 	
@@ -244,6 +245,12 @@ void process_chatmode(const char* host, const int port)
 				// Otherwise, display the message
 				display_message(buf);
 				printf("\n");
+				
+				// Check if room is closing -- exit
+				if (strcmp(buf, CLOSE_MESSAGE) == 0) {
+					printf("Chatroom disconnected...\n");
+					break;
+				}
 			}
 		}
 		else
