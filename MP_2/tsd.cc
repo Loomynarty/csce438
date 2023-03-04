@@ -58,6 +58,23 @@ class SNSServiceImpl final : public SNSService::Service {
     // LIST request from the user. Ensure that both the fields
     // all_users & following_users are populated
     // ------------------------------------------------------------
+
+    int user_index = find_user(request->username());
+    User user = user_db[user_index];
+
+    // Add all users
+    for (User u : user_db) {
+      reply->add_all_users(u.username);
+    }
+
+    // Add self to follows
+    reply->add_following_users(request->username());
+
+    // Add follows
+    for (User u : user.following) {
+      reply->add_following_users(u.username);
+    }
+
     return Status::OK;
   }
 

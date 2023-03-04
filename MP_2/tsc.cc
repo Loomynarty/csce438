@@ -172,9 +172,10 @@ IReply Client::processCommand(std::string& input) {
         command = input.substr(0, index);
         arg = input.substr(index+1);
 
+        request.set_username(username);
+        request.add_arguments(arg);
+
         if (command.compare("FOLLOW") == 0) {
-            request.set_username(username);
-            request.add_arguments(arg);
             Status status = stub_->Follow(&ctx, request, &reply);
             ireply.grpc_status = status;
 
@@ -193,6 +194,33 @@ IReply Client::processCommand(std::string& input) {
             else {
                 ireply.comm_status = FAILURE_UNKNOWN;
             }
+        }
+        else if (command.compare("UNFOLLOW") == 0) {
+
+        }
+    }
+    else {
+        request.set_username(username);
+        
+        if (input.compare("LIST") == 0) {
+            Status status = stub_->List(&ctx, request, &reply);
+            ireply.grpc_status = status;
+
+            // Add users to ireply
+            for (std::string uname : reply.all_users()) {
+                ireply.all_users.push_back(uname);
+            }
+            
+            // Add following to ireply
+            for (std::string uname : reply.following_users()) {
+                ireply.following_users.push_back(uname);
+            }
+
+            ireply.comm_status = SUCCESS;
+
+        }
+        else if (input.compare("TIMELINE") == 0) {
+
         }
     }
 
