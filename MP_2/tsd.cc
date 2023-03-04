@@ -28,8 +28,30 @@ using csce438::Request;
 using csce438::Reply;
 using csce438::SNSService;
 
+// Stores all data regarding users
+struct User {
+  std::string username;
+  std::vector<User> followers;
+  std::vector<User> following;
+  ServerReaderWriter<Message, Message>* stream = 0;
+};
+
+// Local database of all clients
+std::vector<User> user_db;
+
 class SNSServiceImpl final : public SNSService::Service {
-  
+
+  private:
+    int find_user(std::string username) {
+      for (int i = 0; i < user_db.size(); i++) {
+        User u = user_db[i];
+        if (u.username == username) {
+          return i;
+        }
+      }
+      return -1;
+    }
+
   Status List(ServerContext* context, const Request* request, Reply* reply) override {
     // ------------------------------------------------------------
     // In this function, you are to write code that handles 
@@ -45,6 +67,41 @@ class SNSServiceImpl final : public SNSService::Service {
     // request from a user to follow one of the existing
     // users
     // ------------------------------------------------------------
+    std::cout << "Follow attempted - " << request->username() << "... ";
+
+    std::string uname = request->username();
+    std::string username_to_follow = request->arguments(0);
+    int user_index = find_user(uname);
+    int follow_index = find_user(username_to_follow);
+
+    // Did not find user in database - return invalid user
+    if (follow_index == -1) {
+      std::cout << "Follow failed - invalid user\n";
+      reply->set_msg("Follow failed - invalid user");
+    }
+    // User is in database - attempt to follow
+    else {
+      User* user = &user_db[user_index];
+      User* user_to_follow = &user_db[follow_index];
+
+      // Check if user_to_follow is already followed by user
+      for (User u : user->following)  {
+        if (u.username == user_to_follow->username) {
+          std::cout << "Follow failed - already following\n";
+          reply->set_msg("Follow failed - already following");
+          return Status::OK;
+        }
+      }
+
+      user->following.push_back(*user_to_follow);
+      user_to_follow->followers.push_back(*user);
+
+      // TODO - write to file
+
+      std::cout << "Follow successful\n";
+      reply->set_msg("Follow successful");
+    }
+
     return Status::OK; 
   }
 
@@ -63,6 +120,31 @@ class SNSServiceImpl final : public SNSService::Service {
     // a new user and verify if the username is available
     // or already taken
     // ------------------------------------------------------------
+
+    std::cout << "Login attempted - " << request->username() << "... ";
+
+    User user;
+    std::string uname = request->username();
+    int user_index = find_user(uname);
+
+    // No user with the username found -- add them into the database and let them login
+    if (user_index == -1) {
+      user.username = uname;
+      user_db.push_back(user);
+
+      // TODO - write to file
+
+      std::cout << "Login successful\n";
+      reply->set_msg("Login successful");
+    }
+
+    // Username found -- prevent login
+    else {
+      std::cout << "Login failed\n";
+      reply->set_msg("Login failed - duplicate username");
+    }
+
+    
     return Status::OK;
   }
 
@@ -83,6 +165,19 @@ void RunServer(std::string port_no) {
   // which would start the server, make it listen on a particular
   // port number.
   // ------------------------------------------------------------
+  std::string server_addr = "localhost:" + port_no;
+  SNSServiceImpl service;
+
+  ServerBuilder builder;
+  builder.AddListeningPort(server_addr, grpc::InsecureServerCredentials());
+  builder.RegisterService(&service);
+  std::unique_ptr<Server> server(builder.BuildAndStart());
+  std::cout << "Server listening on " << server_addr + "\n";
+
+  // TODO - load file
+
+  server->Wait();
+
 }
 
 int main(int argc, char** argv) {

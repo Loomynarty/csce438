@@ -4,6 +4,16 @@
 #include <grpc++/grpc++.h>
 #include "client.h"
 
+#include "sns.grpc.pb.h"
+
+using grpc::ClientContext;
+using grpc::ClientReaderWriter;
+using grpc::Status;
+using csce438::Message;
+using csce438::Request;
+using csce438::Reply;
+using csce438::SNSService;
+
 class Client : public IClient
 {
     public:
@@ -23,7 +33,7 @@ class Client : public IClient
         
         // You can have an instance of the client stub
         // as a member variable.
-        //std::unique_ptr<NameOfYourStubClass::Stub> stub_;
+        std::unique_ptr<SNSService::Stub> stub_;
 };
 
 int main(int argc, char** argv) {
@@ -45,15 +55,14 @@ int main(int argc, char** argv) {
         }
     }
 
-    Client myc(hostname, username, port);
     // You MUST invoke "run_client" function to start business logic
+    Client myc(hostname, username, port);
     myc.run_client();
 
     return 0;
 }
 
-int Client::connectTo()
-{
+int Client::connectTo() {
 	// ------------------------------------------------------------
     // In this function, you are supposed to create a stub so that
     // you call service methods in the processCommand/porcessTimeline
@@ -64,11 +73,47 @@ int Client::connectTo()
     // Please refer to gRpc tutorial how to create a stub.
 	// ------------------------------------------------------------
 
+    std::string addr = hostname + ":" + port;
+    // error if hostname and port are empty
+    if (addr == ":") {
+        return -1;
+    }
+
+    // Create a stub
+    // 1. create a channel
+    std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel(addr, grpc::InsecureChannelCredentials());
+
+    // 2. pass channel into NewStub
+    stub_ = std::unique_ptr<SNSService::Stub>(SNSService::NewStub(channel));
+
+    // Direct client to Login
+    Request req;
+    Reply reply;
+    ClientContext ctx;
+    req.set_username(username);
+
+    Status status = stub_->Login(&ctx, req, &reply);
+
+    // fail if server isn't running or connection failure
+    if (reply.msg() == "") {
+        return -1;
+    }
+
+    std::cout << "Status Result: " + reply.msg() << "\n";
+
+    IReply ireply;
+    ireply.grpc_status = status;
+
+
+    // Check if username is taken
+    if (reply.msg() == "Login failed - duplicate username") {
+        return 1; // TODO
+    }
+
     return 1; // return 1 if success, otherwise return -1
 }
 
-IReply Client::processCommand(std::string& input)
-{
+IReply Client::processCommand(std::string& input) {
 	// ------------------------------------------------------------
 	// GUIDE 1:
 	// In this function, you are supposed to parse the given input
@@ -114,12 +159,47 @@ IReply Client::processCommand(std::string& input)
     // "following_users" member variable of IReply.
     // ------------------------------------------------------------
     
-    IReply ire;
-    return ire;
+    IReply ireply;
+    std::string command = "";
+    std::string arg = "";
+
+    ClientContext ctx;
+    Request request;
+    Reply reply;
+
+    std::size_t index = input.find_first_of(" ");
+    if (index != std::string::npos) {
+        command = input.substr(0, index);
+        arg = input.substr(index+1);
+
+        if (command.compare("FOLLOW") == 0) {
+            request.set_username(username);
+            request.add_arguments(arg);
+            Status status = stub_->Follow(&ctx, request, &reply);
+            ireply.grpc_status = status;
+
+            // Invalid user
+            if (reply.msg() == "Follow failed - invalid user") {
+                ireply.comm_status = FAILURE_INVALID_USERNAME;
+            }
+            // Already following
+            else if (reply.msg() == "Follow failed - already following") {
+                ireply.comm_status = FAILURE_ALREADY_EXISTS;
+            }
+            // Success
+            else if (reply.msg() == "Follow successful") {
+                ireply.comm_status = SUCCESS;
+            }
+            else {
+                ireply.comm_status = FAILURE_UNKNOWN;
+            }
+        }
+    }
+
+    return ireply;
 }
 
-void Client::processTimeline()
-{
+void Client::processTimeline() {
 	// ------------------------------------------------------------
     // In this function, you are supposed to get into timeline mode.
     // You may need to call a service method to communicate with
