@@ -74,11 +74,18 @@ class SNSServiceImpl final : public SNSService::Service {
     int user_index = find_user(uname);
     int follow_index = find_user(username_to_follow);
 
+    // Prevent self follow
+    if (uname.compare(username_to_follow) == 0) {
+      std::cout << "Follow failed - self follow\n";
+      reply->set_msg("Follow failed - invalid user");
+    }
+
     // Did not find user in database - return invalid user
-    if (follow_index == -1) {
+    else if (follow_index == -1) {
       std::cout << "Follow failed - invalid user\n";
       reply->set_msg("Follow failed - invalid user");
     }
+
     // User is in database - attempt to follow
     else {
       User* user = &user_db[user_index];
