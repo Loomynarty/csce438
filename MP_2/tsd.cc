@@ -135,6 +135,61 @@ class SNSServiceImpl final : public SNSService::Service {
     // request from a user to unfollow one of his/her existing
     // followers
     // ------------------------------------------------------------
+    std::cout << "Unfollow attempted - " << request->username() << "... ";
+
+    std::string uname = request->username();
+    std::string username_to_unfollow = request->arguments(0);
+    int user_index = find_user(uname);
+    int unfollow_index = find_user(username_to_unfollow);
+
+    // Prevent self unfollow
+    if (uname.compare(username_to_unfollow) == 0) {
+      std::cout << "Unfollow failed - self unfollow\n";
+      reply->set_msg("Unfollow failed - invalid user");
+    }
+
+    // Did not find user in database - return invalid user 
+    else if (unfollow_index == -1) {
+      std::cout << "Unfollow failed - invalid user\n";
+      reply->set_msg("Unfollow failed - invalid user");
+    }
+
+    // User is in following list - attempt to unfollow
+    else {
+      bool unfollowing = false;
+      bool unfollowers = false;
+
+      // Undo user->following.push_back(*user_to_follow);
+      for (int i = 0; i < user_db[user_index].following.size(); i++) {
+        if (user_db[user_index].following[i].username == username_to_unfollow) {
+          user_db[user_index].following.erase(user_db[user_index].following.begin() + i);
+          unfollowing = true;
+          break;
+        }
+      }
+
+      // Undo user_to_follow->followers.push_back(*user);
+      for (int i = 0; i < user_db[unfollow_index].followers.size(); i++) {
+        if (user_db[unfollow_index].followers[i].username == uname) {
+          user_db[unfollow_index].followers.erase(user_db[unfollow_index].followers.begin() + i);
+          unfollowers = true;
+          break;
+        }
+      }
+
+      if (unfollowing && unfollowers) {
+        std::cout << "Unfollow successful\n";
+        reply->set_msg("Unfollow successful");
+      }
+      else {
+        std::cout << "Unfollow failed - not following\n";
+        reply->set_msg("Unfollow failed - not following");
+      }
+
+    }
+
+    // TODO - write to file
+
     return Status::OK;
   }
   

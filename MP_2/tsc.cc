@@ -196,7 +196,26 @@ IReply Client::processCommand(std::string& input) {
             }
         }
         else if (command.compare("UNFOLLOW") == 0) {
+            Status status = stub_->UnFollow(&ctx, request, &reply);
+            ireply.grpc_status = status;
 
+            // Invalid user
+            if (reply.msg() == "Unfollow failed - invalid user") {
+                ireply.comm_status = FAILURE_INVALID_USERNAME;
+            }
+
+            // Not following
+            else if (reply.msg() == "Unfollow failed - not following") {
+                ireply.comm_status = FAILURE_NOT_EXISTS;
+            }
+
+            // Success
+            else if (reply.msg() == "Unfollow successful") {
+                ireply.comm_status = SUCCESS;
+            }
+            else {
+                ireply.comm_status = FAILURE_UNKNOWN;
+            }
         }
     }
     else {
