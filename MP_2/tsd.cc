@@ -11,7 +11,7 @@
 #include <unistd.h>
 #include <google/protobuf/util/time_util.h>
 #include <grpc++/grpc++.h>
-#include <json.hpp>
+#include "json.hpp"
 
 #include "sns.grpc.pb.h"
 
@@ -322,7 +322,13 @@ void RunServer(std::string port_no) {
   std::cout << "Server listening on " << server_addr + "\n";
 
   // TODO - load file into local user_db
-  
+  std::ifstream file("data.json");
+  if (file.is_open()) {
+    // Parse json
+    json data = json::parse(file);
+    std::cout << "json test: " << data << "\n";
+  }
+
   server->Wait();
 
 }
