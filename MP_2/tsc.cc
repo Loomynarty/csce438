@@ -289,10 +289,10 @@ void Client::processTimeline() {
     reader.detach();
 
     std::string post;
-    while(true){
+    while(true) {
 
         // Get stdin
-        std::string post = getPostMessage();
+        post = getPostMessage();
 
         // Create message
         Message msg;

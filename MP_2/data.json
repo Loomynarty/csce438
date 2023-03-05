@@ -1,0 +1,18 @@
+{
+    "data": {
+        "u4": {
+            "following": [
+
+            ],
+            "followers": [
+
+            ],
+            "posts": [
+                {
+                    "post": "ffff",
+                    "timestamp": "aaaa"
+                }
+            ]
+        }
+    }
+}

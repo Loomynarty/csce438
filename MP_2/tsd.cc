@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <google/protobuf/util/time_util.h>
 #include <grpc++/grpc++.h>
+#include <json.hpp>
 
 #include "sns.grpc.pb.h"
 
@@ -27,25 +28,26 @@ using csce438::Message;
 using csce438::Request;
 using csce438::Reply;
 using csce438::SNSService;
+using json = nlohmann::json;
 
 // Stores all data regarding users
 struct User {
   std::string username;
-  std::vector<User> followers;
-  std::vector<User> following;
+  std::vector<User*> followers;
+  std::vector<User*> following;
   ServerReaderWriter<Message, Message>* stream = 0;
 };
 
 // Local database of all clients
-std::vector<User> user_db;
+std::vector<User*> user_db;
 
 class SNSServiceImpl final : public SNSService::Service {
 
   private:
     int find_user(std::string username) {
       for (int i = 0; i < user_db.size(); i++) {
-        User u = user_db[i];
-        if (u.username == username) {
+        User* u = user_db[i];
+        if (u->username == username) {
           return i;
         }
       }
@@ -60,19 +62,19 @@ class SNSServiceImpl final : public SNSService::Service {
     // ------------------------------------------------------------
 
     int user_index = find_user(request->username());
-    User user = user_db[user_index];
+    User* user = user_db[user_index];
 
     // Add all users
-    for (User u : user_db) {
-      reply->add_all_users(u.username);
+    for (User* u : user_db) {
+      reply->add_all_users(u->username);
     }
 
     // Add self to follows
     reply->add_following_users(request->username());
 
     // Add follows
-    for (User u : user.following) {
-      reply->add_following_users(u.username);
+    for (User* u : user->following) {
+      reply->add_following_users(u->username);
     }
 
     return Status::OK;
@@ -105,20 +107,20 @@ class SNSServiceImpl final : public SNSService::Service {
 
     // User is in database - attempt to follow
     else {
-      User* user = &user_db[user_index];
-      User* user_to_follow = &user_db[follow_index];
+      User* user = user_db[user_index];
+      User* user_to_follow = user_db[follow_index];
 
       // Check if user_to_follow is already followed by user
-      for (User u : user->following)  {
-        if (u.username == user_to_follow->username) {
+      for (User* u : user->following)  {
+        if (u->username == user_to_follow->username) {
           std::cout << "Follow failed - already following\n";
           reply->set_msg("Follow failed - already following");
           return Status::OK;
         }
       }
 
-      user->following.push_back(*user_to_follow);
-      user_to_follow->followers.push_back(*user);
+      user->following.push_back(user_to_follow);
+      user_to_follow->followers.push_back(user);
 
       // TODO - write to file
 
@@ -160,18 +162,20 @@ class SNSServiceImpl final : public SNSService::Service {
       bool unfollowers = false;
 
       // Undo user->following.push_back(*user_to_follow);
-      for (int i = 0; i < user_db[user_index].following.size(); i++) {
-        if (user_db[user_index].following[i].username == username_to_unfollow) {
-          user_db[user_index].following.erase(user_db[user_index].following.begin() + i);
+      std::vector<User*>* following_list = &(user_db[user_index]->following);
+      for (int i = 0; i < following_list->size(); i++) {
+        if (following_list->at(i)->username == username_to_unfollow) {
+          following_list->erase(following_list->begin() + i);
           unfollowing = true;
           break;
         }
       }
 
       // Undo user_to_follow->followers.push_back(*user);
-      for (int i = 0; i < user_db[unfollow_index].followers.size(); i++) {
-        if (user_db[unfollow_index].followers[i].username == uname) {
-          user_db[unfollow_index].followers.erase(user_db[unfollow_index].followers.begin() + i);
+      std::vector<User*>* followers_list = &(user_db[unfollow_index]->followers);
+      for (int i = 0; i < followers_list->size(); i++) {
+        if (followers_list->at(i)->username == uname) {
+          followers_list->erase(followers_list->begin() + i);
           unfollowers = true;
           break;
         }
@@ -202,13 +206,14 @@ class SNSServiceImpl final : public SNSService::Service {
 
     std::cout << "Login attempted - " << request->username() << "... ";
 
-    User user;
+    User* user;
     std::string uname = request->username();
     int user_index = find_user(uname);
 
     // No user with the username found -- add them into the database and let them login
     if (user_index == -1) {
-      user.username = uname;
+      user = new User;
+      user->username = uname;
       user_db.push_back(user);
 
       // TODO - write to file
@@ -238,15 +243,23 @@ class SNSServiceImpl final : public SNSService::Service {
     Message message_send;
     std::string uname;
     int user_index = -1;
+    bool init = true;
 
     while (stream->Read(&message_recv)) {
+      User* user;
 
       // Check if inital setup
-      if (message_recv.msg() == "INIT") {
+      if (message_recv.msg() == "INIT" && init) {
 
+        init = false;
         uname = message_recv.username();
         std::cout << uname << "\n";
         user_index = find_user(uname);
+        user = user_db[user_index];
+
+        if (user->stream == 0) {
+          user->stream = stream;
+        }
 
         // Retrieve following messages - up to 20
         int count = 0;
@@ -279,10 +292,12 @@ class SNSServiceImpl final : public SNSService::Service {
         timestamp->set_nanos(0);
         message_send.set_allocated_timestamp(timestamp);
 
-        // Send to client
-        stream->Write(message_send);
-
-        // TODO - send post to followers
+        // send post to followers
+        for (User* u : user->followers) {
+          if (u->stream != 0) {
+            u->stream->Write(message_send);
+          }
+        }
       }
     }
 
@@ -307,7 +322,7 @@ void RunServer(std::string port_no) {
   std::cout << "Server listening on " << server_addr + "\n";
 
   // TODO - load file into local user_db
-
+  
   server->Wait();
 
 }
