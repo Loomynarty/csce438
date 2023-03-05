@@ -41,18 +41,17 @@ struct User {
 // Local database of all clients
 std::vector<User*> user_db;
 
-class SNSServiceImpl final : public SNSService::Service {
-
-  private:
-    int find_user(std::string username) {
-      for (int i = 0; i < user_db.size(); i++) {
-        User* u = user_db[i];
-        if (u->username == username) {
-          return i;
-        }
-      }
-      return -1;
+int find_user(std::string username) {
+  for (int i = 0; i < user_db.size(); i++) {
+    User* u = user_db[i];
+    if (u->username == username) {
+      return i;
     }
+  }
+  return -1;
+}
+
+class SNSServiceImpl final : public SNSService::Service {
 
   Status List(ServerContext* context, const Request* request, Reply* reply) override {
     // ------------------------------------------------------------
@@ -74,8 +73,13 @@ class SNSServiceImpl final : public SNSService::Service {
 
     // Add follows
     for (User* u : user->following) {
+      // std::cout << user->username << " -> " << u->username << "\n";
       reply->add_following_users(u->username);
     }
+
+    // for (User* u : user->followers) {
+    //   std::cout << user->username << " <- " << u->username << "\n";
+    // } 
 
     return Status::OK;
   }
@@ -263,7 +267,7 @@ class SNSServiceImpl final : public SNSService::Service {
 
         // Retrieve following messages - up to 20
         int count = 0;
-        while (count < 20) {
+        while (count < 2) {
 
           // Create message
           // TODO - load following messages
@@ -306,6 +310,80 @@ class SNSServiceImpl final : public SNSService::Service {
 
 };
 
+// Load inital data - assumes empty local db
+void LoadInitialData() {
+  std::ifstream file("data.json");
+  if (file.is_open()) {
+    
+    // Parse json
+    json data = json::parse(file);
+    
+    for (auto user_data : data) {
+      
+      // Find user in local db
+      User* user;
+      std::string uname = user_data["username"];
+      int user_index = find_user(uname);
+
+      // Create the user if not found
+      if (user_index == -1) {
+        user = new User;
+        user->username = uname;
+      }
+      // Grab the user in the local database
+      else {
+        user = user_db[user_index];
+      }
+
+      
+      // Load followings / followers
+      for (std::string following : user_data["following"]) {
+        std::cout << uname << " -> " << following << "... ";
+        bool exit = false;
+
+        // Find user_to_follow in local db
+        User* user_to_follow;
+        int following_index = find_user(following);
+
+        // Create the user if not found
+        if (following_index == -1) {
+          user_to_follow = new User;
+          user_to_follow->username = following;
+          user_db.push_back(user_to_follow);
+        }
+
+        // Grab the user in the local database
+        else {
+          user_to_follow = user_db[following_index];
+        }
+
+        // Check if already following
+        for (User* u : user->following) {
+          if (u->username == user_to_follow->username) {
+            std::cout << "already following\n";
+            exit = true;
+            break;
+          }
+        }
+
+        if (exit) {
+          continue;
+        }
+        
+        std::cout << "added\n";
+        user->following.push_back(user_to_follow);
+        user_to_follow->followers.push_back(user);
+
+      }
+      
+      // Add user to db
+      if (user_index == -1) {
+        user_db.push_back(user);
+      }
+    }
+  }
+}
+
 void RunServer(std::string port_no) {
   // ------------------------------------------------------------
   // In this function, you are to write code 
@@ -322,12 +400,7 @@ void RunServer(std::string port_no) {
   std::cout << "Server listening on " << server_addr + "\n";
 
   // TODO - load file into local user_db
-  std::ifstream file("data.json");
-  if (file.is_open()) {
-    // Parse json
-    json data = json::parse(file);
-    std::cout << "json test: " << data << "\n";
-  }
+  LoadInitialData();
 
   server->Wait();
 

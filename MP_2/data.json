@@ -1,18 +1,26 @@
-{
-    "data": {
-        "u4": {
-            "following": [
+[
+    {
+        "username": "u4",
+        "following": [
 
-            ],
-            "followers": [
-
-            ],
-            "posts": [
-                {
-                    "post": "ffff",
-                    "timestamp": "aaaa"
-                }
-            ]
-        }
+        ],
+        "posts": [
+            {
+                "post": "ffff",
+                "timestamp": "aaaa"
+            }
+        ]
+    },
+    {
+        "username": "u5",
+        "following": [
+            "u4", "u6"
+        ],
+        "posts": [
+            {
+                "post": "ccccc",
+                "timestamp": "ddddd"
+            }
+        ]
     }
-}
+]
