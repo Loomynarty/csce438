@@ -1,11 +1,13 @@
 #include <iostream>
 #include <string>
 #include <unistd.h>
+#include <thread>
 #include <grpc++/grpc++.h>
 #include "client.h"
 
 #include "sns.grpc.pb.h"
 
+using google::protobuf::Timestamp;
 using grpc::ClientContext;
 using grpc::ClientReaderWriter;
 using grpc::Status;
@@ -13,6 +15,8 @@ using csce438::Message;
 using csce438::Request;
 using csce438::Reply;
 using csce438::SNSService;
+
+// TODO - signal(SIGINT, handler)
 
 class Client : public IClient
 {
@@ -103,7 +107,6 @@ int Client::connectTo() {
 
     IReply ireply;
     ireply.grpc_status = status;
-
 
     // Check if username is taken
     if (reply.msg() == "Login failed - duplicate username") {
@@ -239,7 +242,7 @@ IReply Client::processCommand(std::string& input) {
 
         }
         else if (input.compare("TIMELINE") == 0) {
-
+            ireply.comm_status = SUCCESS;
         }
     }
 
@@ -263,4 +266,46 @@ void Client::processTimeline() {
     // and you can terminate the client program by pressing
     // CTRL-C (SIGINT)
 	// ------------------------------------------------------------
+
+    ClientContext ctx;
+    std::shared_ptr<ClientReaderWriter<Message, Message>> stream(stub_->Timeline(&ctx));
+
+    Message message;
+
+    // Send message signalling initial setup
+    message.set_username(username);
+    message.set_msg("INIT");
+    stream->Write(message);
+
+    // Read
+    std::thread reader ([&] {
+        Message msg;
+        while (stream->Read(&msg)) {
+            Timestamp timestamp = msg.timestamp();
+            time_t time = timestamp.seconds();
+            displayPostMessage(msg.username(), msg.msg(), time);
+        }
+    });
+    reader.detach();
+
+    std::string post;
+    while(true){
+
+        // Get stdin
+        std::string post = getPostMessage();
+
+        // Create message
+        Message msg;
+        msg.set_username(username);
+        msg.set_msg(post);
+        Timestamp* timestamp = new Timestamp();
+        timestamp->set_seconds(time(NULL));
+        timestamp->set_nanos(0);
+        msg.set_allocated_timestamp(timestamp);
+
+        // Send to server
+        stream->Write(msg);
+    }
+    stream->WritesDone();
+
 }

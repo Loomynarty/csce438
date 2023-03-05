@@ -233,6 +233,59 @@ class SNSServiceImpl final : public SNSService::Service {
     // receiving a message/post from a user, recording it in a file
     // and then making it available on his/her follower's streams
     // ------------------------------------------------------------
+    std::cout << "Timeline activated - ";
+    Message message_recv;
+    Message message_send;
+    std::string uname;
+    int user_index = -1;
+
+    while (stream->Read(&message_recv)) {
+
+      // Check if inital setup
+      if (message_recv.msg() == "INIT") {
+
+        uname = message_recv.username();
+        std::cout << uname << "\n";
+        user_index = find_user(uname);
+
+        // Retrieve following messages - up to 20
+        int count = 0;
+        while (count < 20) {
+
+          // Create message
+          // TODO - load following messages
+          message_send.set_username("Server");
+          message_send.set_msg("Count: " + std::to_string(count) + "\n");
+          Timestamp* timestamp = new Timestamp();
+          timestamp->set_seconds(time(NULL));
+          timestamp->set_nanos(0);
+          message_send.set_allocated_timestamp(timestamp);
+
+          // Send to client
+          stream->Write(message_send);
+          count++;
+        }
+      }
+
+      // Send post to followers
+      else {
+        std::string str = message_recv.msg();
+
+        // Create message
+        message_send.set_username(uname);
+        message_send.set_msg(str);
+        Timestamp* timestamp = new Timestamp();
+        timestamp->set_seconds(time(NULL));
+        timestamp->set_nanos(0);
+        message_send.set_allocated_timestamp(timestamp);
+
+        // Send to client
+        stream->Write(message_send);
+
+        // TODO - send post to followers
+      }
+    }
+
     return Status::OK;
   }
 
@@ -253,7 +306,7 @@ void RunServer(std::string port_no) {
   std::unique_ptr<Server> server(builder.BuildAndStart());
   std::cout << "Server listening on " << server_addr + "\n";
 
-  // TODO - load file
+  // TODO - load file into local user_db
 
   server->Wait();
 
