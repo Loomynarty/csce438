@@ -188,7 +188,6 @@ void FollowUserJSON(std::string username, std::string username_to_follow) {
   json j = json::parse(file);
   file.close();
   
-  // TODO
   Timestamp* timestamp = new Timestamp();
   timestamp->set_seconds(time(NULL));
   timestamp->set_nanos(0);
@@ -200,6 +199,17 @@ void FollowUserJSON(std::string username, std::string username_to_follow) {
   // Update json
   j["users"][username]["following"][username_to_follow] = follow_data; 
   
+  UpdateJSON(j);
+}
+
+void UnfollowUserJSON(std::string username, std::string username_to_unfollow) {
+  // Load data.json
+  std::ifstream file("data.json");
+  json j = json::parse(file);
+  file.close();
+
+  j["users"][username]["following"].erase(username_to_unfollow);
+
   UpdateJSON(j);
 }
 
@@ -270,7 +280,7 @@ class SNSServiceImpl final : public SNSService::Service {
     // Prevent self follow
     if (uname.compare(username_to_follow) == 0) {
       std::cout << "Follow failed - self follow\n";
-      reply->set_msg("Follow failed - invalid user");
+      reply->set_msg("Follow failed - self follow");
     }
 
     // Did not find user in database - return invalid user
@@ -359,6 +369,8 @@ class SNSServiceImpl final : public SNSService::Service {
       if (unfollowing && unfollowers) {
         std::cout << "Unfollow successful\n";
         reply->set_msg("Unfollow successful");
+
+        UnfollowUserJSON(uname, username_to_unfollow);
       }
       else {
         std::cout << "Unfollow failed - not following\n";

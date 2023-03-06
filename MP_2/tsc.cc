@@ -190,6 +190,10 @@ IReply Client::processCommand(std::string& input) {
             else if (reply.msg() == "Follow failed - already following") {
                 ireply.comm_status = FAILURE_ALREADY_EXISTS;
             }
+            // Self follow
+            else if (reply.msg() == "Follow failed - self follow") {
+                ireply.comm_status = FAILURE_ALREADY_EXISTS;
+            }
             // Success
             else if (reply.msg() == "Follow successful") {
                 ireply.comm_status = SUCCESS;
