@@ -28,7 +28,7 @@ using csce438::Message;
 using csce438::Request;
 using csce438::Reply;
 using csce438::SNSService;
-using json = nlohmann::json;
+using json = nlohmann::ordered_json;
 
 // Stores all data regarding users
 struct User {
@@ -41,6 +41,15 @@ struct User {
 // Local database of all clients
 std::vector<User*> user_db;
 
+int find_following(User* user, std::string following_username) {
+  for (int i = 0; i < user->following.size(); i++) {
+    if (user->following[i]->username == following_username) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 int find_user(std::string username) {
   for (int i = 0; i < user_db.size(); i++) {
     User* u = user_db[i];
@@ -49,6 +58,167 @@ int find_user(std::string username) {
     }
   }
   return -1;
+}
+
+void UpdateJSON(json j) {
+  std::ofstream ofs("data.json");
+  ofs << std::setw(4) << j << std::endl;
+  ofs.close();
+}
+
+// Load inital data - assumes empty local db
+void LoadInitialData() {
+  std::ifstream file("data.json");
+  json j; 
+  
+  if (file.is_open()) {
+
+    // Check if file is empty
+    if (file.peek() == std::ifstream::traits_type::eof()) {
+      file.close();
+
+      // Update data.json with an empty array
+      j = json::object();
+      j["users"] = json::object();
+      j["posts"] = json::array();
+      UpdateJSON(j);
+
+      return;
+    }
+
+    // Parse json
+    j = json::parse(file);
+    file.close();
+    
+    for (auto user_data : j["users"]) {
+      // Find user in local db
+      User* user;
+      std::string uname = user_data["username"];
+      int user_index = find_user(uname);
+
+      // Create the user if not found
+      if (user_index == -1) {
+        user = new User;
+        user->username = uname;
+      }
+      // Grab the user in the local database
+      else {
+        user = user_db[user_index];
+      }
+
+      // Load followings / followers
+      for (auto following_data : user_data["following"]) {
+        std::string follow_username = following_data["username"];
+        std::cout << uname << " -> " << follow_username << "... ";
+        bool exit = false;
+
+        // Find user_to_follow in local db
+        User* user_to_follow;
+        int following_index = find_user(follow_username);
+
+        // Create the user if not found
+        if (following_index == -1) {
+          user_to_follow = new User;
+          user_to_follow->username = follow_username;
+          user_db.push_back(user_to_follow);
+        }
+
+        // Grab the user in the local database
+        else {
+          user_to_follow = user_db[following_index];
+        }
+
+        // Check if already following
+        for (User* u : user->following) {
+          if (u->username == user_to_follow->username) {
+            std::cout << "already following\n";
+            exit = true;
+            break;
+          }
+        }
+
+        if (exit) {
+          continue;
+        }
+
+        std::cout << "added\n";
+        user->following.push_back(user_to_follow);
+        user_to_follow->followers.push_back(user);
+      }
+      
+      // Add user to db
+      if (user_index == -1) {
+        user_db.push_back(user);
+      }
+    }
+  }
+
+  // Create data.json if it doesn't exist
+  else {
+    j = json::object();
+    j["users"] = json::object();
+    j["posts"] = json::array();
+    UpdateJSON(j);
+  }
+}
+
+// Add a new user to data.json
+void CreateUserJSON(std::string username) {
+  // std::cout << "adding " << username << " to storage\n";
+  
+  // Load data.json
+  std::ifstream file("data.json");
+  json j = json::parse(file);
+  file.close();
+
+  // Create user object
+  json user_data;
+  user_data["username"] = username;
+  user_data["following"] = json::object();
+  j["users"][username] = user_data;
+
+  UpdateJSON(j);
+}
+
+void FollowUserJSON(std::string username, std::string username_to_follow) {
+  // std::cout << username << " -> " << username_to_follow << " to storage\n";
+  
+  // Load data.json
+  std::ifstream file("data.json");
+  json j = json::parse(file);
+  file.close();
+  
+  // TODO
+  Timestamp* timestamp = new Timestamp();
+  timestamp->set_seconds(time(NULL));
+  timestamp->set_nanos(0);
+
+  json follow_data;
+  follow_data["username"] = username_to_follow;
+  follow_data["timestamp"] = timestamp->seconds();
+
+  // Update json
+  j["users"][username]["following"][username_to_follow] = follow_data; 
+  
+  UpdateJSON(j);
+}
+
+void TimelineJSON(Message message, Timestamp* timestamp) {
+  // std::cout << "writing post to storage\n";
+  std::string username = message.username();
+
+  // Load data.json
+  std::ifstream file("data.json");
+  json j = json::parse(file);
+  file.close();
+
+  json post = json::object();
+  post["message"] = message.msg();
+  post["username"] = message.username();
+  post["timestamp"] = timestamp->seconds();
+  j["posts"].push_back(post);
+
+  UpdateJSON(j);
 }
 
 class SNSServiceImpl final : public SNSService::Service {
@@ -126,10 +296,11 @@ class SNSServiceImpl final : public SNSService::Service {
       user->following.push_back(user_to_follow);
       user_to_follow->followers.push_back(user);
 
-      // TODO - write to file
-
       std::cout << "Follow successful\n";
       reply->set_msg("Follow successful");
+
+      // TODO write to json - update following
+      FollowUserJSON(user->username, user_to_follow->username);
     }
 
     return Status::OK; 
@@ -220,9 +391,10 @@ class SNSServiceImpl final : public SNSService::Service {
       user->username = uname;
       user_db.push_back(user);
 
-      // TODO - write to file
-
+      // TODO - write to json - create a user with username, following, and posts fields
       std::cout << "Login successful\n";
+      CreateUserJSON(uname);
+
       reply->set_msg("Login successful");
     }
 
@@ -267,14 +439,42 @@ class SNSServiceImpl final : public SNSService::Service {
 
         // Retrieve following messages - up to 20
         int count = 0;
-        while (count < 2) {
+
+        // Load json
+        std::ifstream file("data.json");
+        json j = json::parse(file);
+        file.close();
+
+        // Get the recent 20 messages
+        
+        json posts = j["posts"];
+        for (auto it = posts.rbegin(); it != posts.rend(); it++) {
+          if (count >= 20) {
+            break;
+          }
+
+          std::string message_username = (*it)["username"];
+          if (uname != message_username) {
+            // Check if username is followed
+            if (find_following(user, message_username) < 0) {
+              continue;
+            }
+
+            // Check if message is after follow age
+            int64_t follow_age = j["users"][uname]["following"][message_username]["timestamp"];
+            int64_t message_seconds = (*it)["timestamp"];
+
+            if (follow_age > message_seconds) {
+              continue;
+            }
+          }
+
 
           // Create message
-          // TODO - load following messages
-          message_send.set_username("Server");
-          message_send.set_msg("Count: " + std::to_string(count) + "\n");
+          message_send.set_username((*it)["username"]);
+          message_send.set_msg((*it)["message"]);
           Timestamp* timestamp = new Timestamp();
-          timestamp->set_seconds(time(NULL));
+          timestamp->set_seconds((*it)["timestamp"]);
           timestamp->set_nanos(0);
           message_send.set_allocated_timestamp(timestamp);
 
@@ -282,6 +482,7 @@ class SNSServiceImpl final : public SNSService::Service {
           stream->Write(message_send);
           count++;
         }
+        
       }
 
       // Send post to followers
@@ -302,6 +503,9 @@ class SNSServiceImpl final : public SNSService::Service {
             u->stream->Write(message_send);
           }
         }
+
+        // Update JSON
+        TimelineJSON(message_send, timestamp);
       }
     }
 
@@ -310,79 +514,6 @@ class SNSServiceImpl final : public SNSService::Service {
 
 };
 
-// Load inital data - assumes empty local db
-void LoadInitialData() {
-  std::ifstream file("data.json");
-  if (file.is_open()) {
-    
-    // Parse json
-    json data = json::parse(file);
-    
-    for (auto user_data : data) {
-      
-      // Find user in local db
-      User* user;
-      std::string uname = user_data["username"];
-      int user_index = find_user(uname);
-
-      // Create the user if not found
-      if (user_index == -1) {
-        user = new User;
-        user->username = uname;
-      }
-      // Grab the user in the local database
-      else {
-        user = user_db[user_index];
-      }
-
-      
-      // Load followings / followers
-      for (std::string following : user_data["following"]) {
-        std::cout << uname << " -> " << following << "... ";
-        bool exit = false;
-
-        // Find user_to_follow in local db
-        User* user_to_follow;
-        int following_index = find_user(following);
-
-        // Create the user if not found
-        if (following_index == -1) {
-          user_to_follow = new User;
-          user_to_follow->username = following;
-          user_db.push_back(user_to_follow);
-        }
-
-        // Grab the user in the local database
-        else {
-          user_to_follow = user_db[following_index];
-        }
-
-        // Check if already following
-        for (User* u : user->following) {
-          if (u->username == user_to_follow->username) {
-            std::cout << "already following\n";
-            exit = true;
-            break;
-          }
-        }
-
-        if (exit) {
-          continue;
-        }
-        
-        std::cout << "added\n";
-        user->following.push_back(user_to_follow);
-        user_to_follow->followers.push_back(user);
-
-      }
-      
-      // Add user to db
-      if (user_index == -1) {
-        user_db.push_back(user);
-      }
-    }
-  }
-}
 
 void RunServer(std::string port_no) {
   // ------------------------------------------------------------
@@ -399,7 +530,7 @@ void RunServer(std::string port_no) {
   std::unique_ptr<Server> server(builder.BuildAndStart());
   std::cout << "Server listening on " << server_addr + "\n";
 
-  // TODO - load file into local user_db
+  // load inital data into local user_db
   LoadInitialData();
 
   server->Wait();
