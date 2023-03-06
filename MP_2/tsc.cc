@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <thread>
 #include <grpc++/grpc++.h>
+#include <signal.h>
 #include "client.h"
 
 #include "sns.grpc.pb.h"
@@ -16,7 +17,9 @@ using csce438::Request;
 using csce438::Reply;
 using csce438::SNSService;
 
-// TODO - signal(SIGINT, handler)
+std::string hostname = "localhost";
+std::string username = "default";
+std::string port = "3010";
 
 class Client : public IClient
 {
@@ -40,11 +43,26 @@ class Client : public IClient
         std::unique_ptr<SNSService::Stub> stub_;
 };
 
-int main(int argc, char** argv) {
+// Signal the server that the client has SIGINTed
+// flip connected to false
+void sig_handler(int sig) {
+    ClientContext ctx;
+    Request request;
+    Reply reply;
+    
+    std::string addr = hostname + ":" + port;
+    request.set_username(username);
+    request.add_arguments("SIGINT");
 
-    std::string hostname = "localhost";
-    std::string username = "default";
-    std::string port = "3010";
+    std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel(addr, grpc::InsecureChannelCredentials());
+    std::unique_ptr<SNSService::Stub> stub = std::unique_ptr<SNSService::Stub>(SNSService::NewStub(channel));
+    Status status = stub->Login(&ctx, request, &reply);
+
+    exit(0);
+}
+
+int main(int argc, char** argv) {
+ 
     int opt = 0;
     while ((opt = getopt(argc, argv, "h:u:p:")) != -1){
         switch(opt) {
@@ -58,6 +76,9 @@ int main(int argc, char** argv) {
                 std::cerr << "Invalid Command Line Argument\n";
         }
     }
+
+    // Handle SIGINT
+    signal(SIGINT, sig_handler);
 
     // You MUST invoke "run_client" function to start business logic
     Client myc(hostname, username, port);
@@ -103,14 +124,12 @@ int Client::connectTo() {
         return -1;
     }
 
-    std::cout << "Status Result: " + reply.msg() << "\n";
-
     IReply ireply;
     ireply.grpc_status = status;
 
     // Check if username is taken
     if (reply.msg() == "Login failed - duplicate username") {
-        return 1; // TODO
+        return -1;
     }
 
     return 1; // return 1 if success, otherwise return -1

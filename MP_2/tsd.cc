@@ -32,6 +32,7 @@ using json = nlohmann::ordered_json;
 
 // Stores all data regarding users
 struct User {
+  bool connected = false;
   std::string username;
   std::vector<User*> followers;
   std::vector<User*> following;
@@ -309,7 +310,6 @@ class SNSServiceImpl final : public SNSService::Service {
       std::cout << "Follow successful\n";
       reply->set_msg("Follow successful");
 
-      // TODO write to json - update following
       FollowUserJSON(user->username, user_to_follow->username);
     }
 
@@ -379,8 +379,6 @@ class SNSServiceImpl final : public SNSService::Service {
 
     }
 
-    // TODO - write to file
-
     return Status::OK;
   }
   
@@ -391,26 +389,38 @@ class SNSServiceImpl final : public SNSService::Service {
     // or already taken
     // ------------------------------------------------------------
 
-    std::cout << "Login attempted - " << request->username() << "... ";
 
     User* user;
     std::string uname = request->username();
+
+    // Catch SIGINT case - flip connected to false;
+    if (!request->arguments().empty()) {
+      user_db[find_user(uname)]->connected = false;
+      return Status::CANCELLED;
+    }
+
+    std::cout << "Login attempted - " << request->username() << "... ";
     int user_index = find_user(uname);
 
     // No user with the username found -- add them into the database and let them login
     if (user_index == -1) {
       user = new User;
       user->username = uname;
+      user->connected = true;
       user_db.push_back(user);
 
-      // TODO - write to json - create a user with username, following, and posts fields
       std::cout << "Login successful\n";
       CreateUserJSON(uname);
 
       reply->set_msg("Login successful");
     }
 
-    // Username found -- prevent login
+    // Username found - check if connected
+    else if (!(user_db[user_index]->connected)) {
+      std::cout << "Login successful\n";
+      user_db[user_index]->connected = true;
+      reply->set_msg("Login successful");
+    }
     else {
       std::cout << "Login failed\n";
       reply->set_msg("Login failed - duplicate username");
