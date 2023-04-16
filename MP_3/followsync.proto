@@ -10,18 +10,15 @@ service SNSFollowSync {
     rpc SyncTimeline (Post) returns (Reply) {}
 }
 
-
-Ex: U1 follows U2. followee: U1, follower: U2
+// Ex: U1 follows U2. followee: U2, follower: U1 
 message Relation {
     int32 followee = 1;
     int32 follower = 2;
 }
 
-
 message Users {
     repeated int32 user_id = 1;
 }
-
 
 message Post {
     int32 posted_by = 1;
@@ -29,7 +26,6 @@ message Post {
     string msg = 3;
     google.protobuf.Timestamp timestamp = 4;
 }
-
 
 message Reply {
     string msg = 1;

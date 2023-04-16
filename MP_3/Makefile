@@ -16,7 +16,13 @@ PROTOC = protoc
 GRPC_CPP_PLUGIN = grpc_cpp_plugin
 GRPC_CPP_PLUGIN_PATH ?= `which $(GRPC_CPP_PLUGIN)`
 
-all: system-check tsc tsd 
+all: system-check coordinator followsync tsc tsd 
+
+followsync: sns.pb.o sns.grpc.pb.o followsync.pb.o followsync.grpc.pb.o followsync.o 
+	$(CXX) $^ $(LDFLAGS) -g -o $@
+
+coordinator: sns.pb.o sns.grpc.pb.o coordinator.pb.o coordinator.grpc.pb.o coordinator.o 
+	$(CXX) $^ $(LDFLAGS) -g -o $@
 
 tsc: sns.pb.o sns.grpc.pb.o tsc.o
 	$(CXX) $^ $(LDFLAGS) -g -o $@
@@ -33,7 +39,7 @@ tsd: sns.pb.o sns.grpc.pb.o tsd.o
 	$(PROTOC) -I.:/home/csce438/grpc/third_party/protobuf/src --cpp_out=. $<
 
 clean:
-	rm -f *.txt *.o *.pb.cc *.pb.h tsc tsd
+	rm -f *.txt *.o *.pb.cc *.pb.h tsc tsd coordinator followsync
 
 
 # The following is to test your system and ensure a smoother experience.

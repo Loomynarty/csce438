@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <grpc++/grpc++.h>
 #include "client.h"
-#include<glog/logging.h>
+#include <glog/logging.h>
 #define log(severity, msg) LOG(severity) << msg; google::FlushLogFiles(google::severity); 
 
 #include "sns.grpc.pb.h"
