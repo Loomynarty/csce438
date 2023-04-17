@@ -3,6 +3,7 @@
 #include <google/protobuf/timestamp.pb.h>
 #include <google/protobuf/duration.pb.h>
 
+#include <vector>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -32,6 +33,10 @@ using snsCoordinator::User;
 using snsCoordinator::Users;
 using snsCoordinator::ClusterID;
 using snsCoordinator::FollowSyncs;
+
+// Store Master servers
+// Store Slave servers
+// Store FollowSyncs
 
 class SNSCoordinatorImpl final : public SNSCoordinator::Service {
     

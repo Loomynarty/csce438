@@ -56,7 +56,7 @@ class Client : public IClient
         IReply Login();
         IReply List();
         IReply Follow(const std::string& username2);
-        IReply UnFollow(const std::string& username2);
+        // IReply UnFollow(const std::string& username2);
         void Timeline(const std::string& username);
 
 
@@ -108,13 +108,21 @@ int Client::connectTo()
     // a member variable in your own Client class.
     // Please refer to gRpc tutorial how to create a stub.
 	// ------------------------------------------------------------
+
+    // Contact C for server IP and Port
+
+
+    // Connect to returned master server
+
+
     std::string login_info = hostname + ":" + port;
-    stub_ = std::unique_ptr<SNSService::Stub>(SNSService::NewStub(
-               grpc::CreateChannel(
-                    login_info, grpc::InsecureChannelCredentials())));
+    stub_ = std::unique_ptr<SNSService::Stub>(SNSService::NewStub(grpc::CreateChannel(login_info, grpc::InsecureChannelCredentials())));
 
     IReply ire = Login();
-    if(!ire.grpc_status.ok()) {
+    if (!ire.grpc_status.ok()) {
+        return -1;
+    }
+    if (ire.comm_status != SUCCESS) {
         return -1;
     }
     return 1;
@@ -185,13 +193,16 @@ IReply Client::processCommand(std::string& input)
 
         if (cmd == "FOLLOW") {
             return Follow(argument);
-        } else if(cmd == "UNFOLLOW") {
-            return UnFollow(argument);
-        }
-    } else {
+        } 
+        // else if(cmd == "UNFOLLOW") {
+        //     return UnFollow(argument);
+        // }
+    } 
+    else {
         if (input == "LIST") {
             return List();
-        } else if (input == "TIMELINE") {
+        } 
+        else if (input == "TIMELINE") {
             ire.comm_status = SUCCESS;
             return ire;
         }
@@ -278,31 +289,31 @@ IReply Client::Follow(const std::string& username2) {
     return ire;
 }
 
-IReply Client::UnFollow(const std::string& username2) {
-    Request request;
+// IReply Client::UnFollow(const std::string& username2) {
+//     Request request;
 
-    request.set_username(username);
-    request.add_arguments(username2);
+//     request.set_username(username);
+//     request.add_arguments(username2);
 
-    Reply reply;
+//     Reply reply;
 
-    ClientContext context;
+//     ClientContext context;
 
-    Status status = stub_->UnFollow(&context, request, &reply);
-    IReply ire;
-    ire.grpc_status = status;
-    if (reply.msg() == "unknown follower username") {
-        ire.comm_status = FAILURE_INVALID_USERNAME;
-    } else if (reply.msg() == "you are not follower") {
-        ire.comm_status = FAILURE_INVALID_USERNAME;
-    } else if (reply.msg() == "UnFollow Successful") {
-        ire.comm_status = SUCCESS;
-    } else {
-        ire.comm_status = FAILURE_UNKNOWN;
-    }
+//     Status status = stub_->UnFollow(&context, request, &reply);
+//     IReply ire;
+//     ire.grpc_status = status;
+//     if (reply.msg() == "unknown follower username") {
+//         ire.comm_status = FAILURE_INVALID_USERNAME;
+//     } else if (reply.msg() == "you are not follower") {
+//         ire.comm_status = FAILURE_INVALID_USERNAME;
+//     } else if (reply.msg() == "UnFollow Successful") {
+//         ire.comm_status = SUCCESS;
+//     } else {
+//         ire.comm_status = FAILURE_UNKNOWN;
+//     }
 
-    return ire;
-}
+//     return ire;
+// }
 
 IReply Client::Login() {
     Request request;
@@ -314,7 +325,7 @@ IReply Client::Login() {
 
     IReply ire;
     ire.grpc_status = status;
-    if (reply.msg() == "you have already joined") {
+    if (reply.msg() == "You have already logged in!") {
         ire.comm_status = FAILURE_ALREADY_EXISTS;
     } else {
         ire.comm_status = SUCCESS;
@@ -325,31 +336,29 @@ IReply Client::Login() {
 void Client::Timeline(const std::string& username) {
     ClientContext context;
 
-    std::shared_ptr<ClientReaderWriter<Message, Message>> stream(
-            stub_->Timeline(&context));
+    std::shared_ptr<ClientReaderWriter<Message, Message>> stream(stub_->Timeline(&context));
 
     //Thread used to read chat messages and send them to the server
     std::thread writer([username, stream]() {
-            std::string input = "Set Stream";
-            Message m = MakeMessage(username, input);
-            stream->Write(m);
-            while (1) {
+        std::string input = "Set Stream";
+        Message m = MakeMessage(username, input);
+        stream->Write(m);
+        while (1) {
             input = getPostMessage();
             m = MakeMessage(username, input);
             stream->Write(m);
-            }
-            stream->WritesDone();
-            });
+        }
+        stream->WritesDone();
+    });
 
     std::thread reader([username, stream]() {
-            Message m;
-            while(stream->Read(&m)){
-
+        Message m;
+        while(stream->Read(&m)){
             google::protobuf::Timestamp temptime = m.timestamp();
             std::time_t time = temptime.seconds();
             displayPostMessage(m.username(), m.msg(), time);
-            }
-            });
+        }
+    });
 
     //Wait for the threads to finish
     writer.join();

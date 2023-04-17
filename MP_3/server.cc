@@ -170,19 +170,18 @@ class SNSServiceImpl final : public SNSService::Service {
         else{ 
             Client *user = &client_db[user_index];
             if(user->connected)
-                reply->set_msg("Invalid Username");
+                reply->set_msg("You have already logged in!");
             else{
                 std::string msg = "Welcome Back " + user->username;
                 reply->set_msg(msg);
                 user->connected = true;
             }
         }
-        // log(INFO, "Login Request - " + reply->msg());
+        log(INFO, "Login Request - " + reply->msg());
         return Status::OK;
     }
 
-    Status Timeline(ServerContext* context, 
-    ServerReaderWriter<Message, Message>* stream) override {
+    Status Timeline(ServerContext* context, ServerReaderWriter<Message, Message>* stream) override {
         log(INFO,"Serving Timeline Request");
         Message message;
         Client *c;
@@ -276,9 +275,9 @@ int main(int argc, char** argv) {
     while ((opt = getopt(argc, argv, "p:")) != -1){
         switch(opt) {
             case 'p':
-            port = optarg;break;
+                port = optarg;break;
             default:
-            std::cerr << "Invalid Command Line Argument\n";
+                std::cerr << "Invalid Command Line Argument\n";
         }
     }
 
