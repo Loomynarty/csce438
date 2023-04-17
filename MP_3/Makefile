@@ -27,7 +27,7 @@ coordinator: sns.pb.o sns.grpc.pb.o coordinator.pb.o coordinator.grpc.pb.o coord
 client: sns.pb.o sns.grpc.pb.o client.o
 	$(CXX) $^ $(LDFLAGS) -g -o $@
 
-server: sns.pb.o sns.grpc.pb.o server.o
+server: coordinator.pb.o coordinator.grpc.pb.o sns.pb.o sns.grpc.pb.o server.o
 	$(CXX) $^ $(LDFLAGS) -g -o $@
 
 .PRECIOUS: %.grpc.pb.cc

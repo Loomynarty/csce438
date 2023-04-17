@@ -36,6 +36,7 @@
 #include <google/protobuf/timestamp.pb.h>
 #include <google/protobuf/duration.pb.h>
 
+#include <thread>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -48,7 +49,7 @@
 #define log(severity, msg) LOG(severity) << msg; google::FlushLogFiles(google::severity); 
 
 #include "sns.grpc.pb.h"
-
+#include "coordinator.grpc.pb.h"
 
 using google::protobuf::Timestamp;
 using google::protobuf::Duration;
@@ -58,12 +59,24 @@ using grpc::ServerContext;
 using grpc::ServerReader;
 using grpc::ServerReaderWriter;
 using grpc::ServerWriter;
+using grpc::Channel;
+using grpc::ClientContext;
+using grpc::ClientReader;
+using grpc::ClientReaderWriter;
+using grpc::ClientWriter;
 using grpc::Status;
 using csce438::Message;
 using csce438::ListReply;
 using csce438::Request;
 using csce438::Reply;
 using csce438::SNSService;
+using snsCoordinator::Heartbeat;
+using snsCoordinator::SNSCoordinator;
+using snsCoordinator::ServerType;
+using snsCoordinator::MASTER;
+using snsCoordinator::SLAVE;
+using snsCoordinator::SYNC;
+using google::protobuf::util::TimeUtil;
 
 struct Client {
     std::string username;
@@ -76,6 +89,9 @@ struct Client {
         return (username == c1.username);
     }
 };
+
+// Coordinator Stub
+std::unique_ptr<SNSCoordinator::Stub> coord_stub_;
 
 //Vector that stores every client that has been created
 std::vector<Client> client_db;
@@ -193,8 +209,8 @@ class SNSServiceImpl final : public SNSService::Service {
             //Write the current message to "username.txt"
             std::string filename = username+".txt";
             std::ofstream user_file(filename,std::ios::app|std::ios::out|std::ios::in);
-            google::protobuf::Timestamp temptime = message.timestamp();
-            std::string time = google::protobuf::util::TimeUtil::ToString(temptime);
+            Timestamp temptime = message.timestamp();
+            std::string time = TimeUtil::ToString(temptime);
             std::string fileinput = time+" :: "+message.username()+":"+message.msg()+"\n";
 
             //"Set Stream" is the default message from the client to initialize the stream
@@ -254,8 +270,36 @@ class SNSServiceImpl final : public SNSService::Service {
 
 };
 
+void heartbeat_thread(int id, ServerType type, std::string ip, std::string port) {
+
+    // Create the stream
+    ClientContext ctx;
+    std::shared_ptr<ClientReaderWriter<Heartbeat, Heartbeat>> stream(coord_stub_->HandleHeartBeats(&ctx));
+
+    while (true) {
+        // Create heartbeat
+        log(INFO, "Sending heartbeat");
+
+        Heartbeat beat;
+        beat.set_server_id(id);
+        beat.set_server_type(type);
+        beat.set_server_ip(ip);
+        beat.set_server_port(port);
+        Timestamp* timestamp = new Timestamp();
+        timestamp->set_seconds(time(NULL));
+        timestamp->set_nanos(0);
+        beat.set_allocated_timestamp(timestamp);
+
+        // Send to coordinator
+        stream->Write(beat); 
+
+        // Sleep for 10 seconds
+        std::this_thread::sleep_for(std::chrono::seconds(10));
+    }
+}
+
 void RunServer(std::string port_no) {
-    std::string server_address = "0.0.0.0:"+port_no;
+    std::string server_address = "0.0.0.0:" + port_no;
     SNSServiceImpl service;
 
     ServerBuilder builder;
@@ -269,26 +313,82 @@ void RunServer(std::string port_no) {
 }
 
 int main(int argc, char** argv) {
-    std::string port = "3010";
 
+    // Coordinator default location
+    std::string caddr = "0.0.0.0";
+    std::string cport = "8000";
+
+    std::string port = "-1";
+    std::string id = "-1";
+    std::string t = "-1";
     int opt = 0;
-    while ((opt = getopt(argc, argv, "p:")) != -1){
+    while ((opt = getopt(argc, argv, "c:o:p:i:t:")) != -1){
         switch(opt) {
+            case 'c':
+                caddr = optarg;
+                break;
+            case 'o':
+                cport = optarg;
+                break;
             case 'p':
-                port = optarg;break;
+                port = optarg;
+                break;
+            case 'i':
+                id = optarg;
+                break;
+            case 't':
+                t = optarg;
+                break;
             default:
                 std::cerr << "Invalid Command Line Argument\n";
         }
     }
+    if (port == "-1") {
+        std::cout << "Please enter a port! (-p)";
+        return -1;
+    }
+    if (id == "-1") {
+        std::cout << "Please enter an id! (-i)";
+        return -1;
+    }
+    if (t != "master" && t != "slave") {
+        std::cout << "Please enter a valid type! (-t)";
+        return -1;
+    }
 
-    std::string log_file_name = std::string("server-") + port;
+    std::string log_file_name = t + id + "-" + port;
 
     // log to the terminal
     FLAGS_alsologtostderr = 1;
 
     google::InitGoogleLogging(log_file_name.c_str());
     log(INFO, "Logging Initialized. Server starting...");
+
+    // Create coordinator stub
+    std::string coord_login = caddr + ":" + cport;
+    coord_stub_ = std::unique_ptr<SNSCoordinator::Stub>(SNSCoordinator::NewStub(grpc::CreateChannel(coord_login, grpc::InsecureChannelCredentials())));
+
+    // Create heartbeat
+    // Heartbeat* beat = new Heartbeat();
+    // beat->set_server_id(std::stoi(id));
+    // log(INFO, id);
+    ServerType type;
+    if (t == "master") {
+        type = MASTER;
+    }
+    else if (t == "slave") {
+        type = SLAVE;
+    }
+    // beat->set_server_type(type);
+    // beat->set_server_ip("0.0.0.0");
+    // beat->set_server_port(port);
+
+    // Start heartbeat thread
+    std::thread hb(heartbeat_thread, std::stoi(id), type, "0.0.0.0", port);
+
+    // Start the server
     RunServer(port);
+    hb.join();
 
     return 0;
 }

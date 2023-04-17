@@ -33,6 +33,7 @@ using snsCoordinator::User;
 using snsCoordinator::Users;
 using snsCoordinator::ClusterID;
 using snsCoordinator::FollowSyncs;
+using google::protobuf::util::TimeUtil;
 
 // Store Master servers
 // Store Slave servers
@@ -41,21 +42,36 @@ using snsCoordinator::FollowSyncs;
 class SNSCoordinatorImpl final : public SNSCoordinator::Service {
     
     Status HandleHeartBeats(ServerContext* context, ServerReaderWriter<Heartbeat, Heartbeat>* stream) override {
+        Heartbeat beat;
+        while (stream->Read(&beat)) {
+            log(INFO, "Received Heartbeat - Server " + std::to_string(beat.server_id()));
+            // log(INFO, "Server ID: " + std::to_string(beat.server_id()));
+            // log(INFO, "Server Type: " + std::to_string(beat.server_type()));
+            // log(INFO, "Server Location: " + beat.server_ip() + ":" + beat.server_port());
+            // log(INFO, "Timestamp: " + TimeUtil::ToString(beat.timestamp()));
+
+
+            // a) if first heartbeat, add to master / slave server db 
+            // create a timer for 20 seconds tied to the server
+            // reset it if another heartbeat is received
+            // if the 20 second timer pops, assume dead and either mark it as dead or remove from db. return State:Bad or something
+        }
 
         return Status::OK;
     }
 
     Status GetFollowSyncsForUsers(ServerContext* context, const Users* users, FollowSyncs* syncs) override {
-
+        log(INFO, "Fetching followsync...");
         return Status::OK;
     }
 
     Status GetServer(ServerContext* context, const User* user, snsCoordinator::Server server) {
-
+        log(INFO, "Fetching serving...");
         return Status::OK;
     }
 
     Status GetSlave(ServerContext*, const ClusterID* cid, Server* server) {
+        log(INFO, "Fetching slave...");
         return Status::OK;
     }
 
@@ -77,7 +93,7 @@ void RunCoordinator(std::string port_no) {
 }
 
 int main(int argc, char** argv) {
-    std::string port = "3010";
+    std::string port = "8000";
 
     int opt = 0;
     while ((opt = getopt(argc, argv, "p:")) != -1){
