@@ -24,7 +24,7 @@ followsync: sns.pb.o sns.grpc.pb.o followsync.pb.o followsync.grpc.pb.o followsy
 coordinator: sns.pb.o sns.grpc.pb.o coordinator.pb.o coordinator.grpc.pb.o coordinator.o 
 	$(CXX) $^ $(LDFLAGS) -g -o $@
 
-client: sns.pb.o sns.grpc.pb.o client.o
+client: coordinator.pb.o coordinator.grpc.pb.o sns.pb.o sns.grpc.pb.o client.o
 	$(CXX) $^ $(LDFLAGS) -g -o $@
 
 server: coordinator.pb.o coordinator.grpc.pb.o sns.pb.o sns.grpc.pb.o server.o

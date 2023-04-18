@@ -10,6 +10,7 @@
 #define log(severity, msg) LOG(severity) << msg; google::FlushLogFiles(google::severity); 
 
 #include "sns.grpc.pb.h"
+#include "coordinator.grpc.pb.h"
 using grpc::Channel;
 using grpc::ClientContext;
 using grpc::ClientReader;
@@ -21,6 +22,9 @@ using csce438::ListReply;
 using csce438::Request;
 using csce438::Reply;
 using csce438::SNSService;
+using snsCoordinator::SNSCoordinator;
+using snsCoordinator::User;
+using snsCoordinator::Server;
 
 Message MakeMessage(const std::string& username, const std::string& msg) {
     Message m;
@@ -46,12 +50,15 @@ class Client : public IClient
         virtual IReply processCommand(std::string& input);
         virtual void processTimeline();
     private:
-        std::string hostname;
         std::string username;
+        std::string hostname;
         std::string port;
+        std::string master_hostname;
+        std::string master_port;
         // You can have an instance of the client stub
         // as a member variable.
         std::unique_ptr<SNSService::Stub> stub_;
+        std::unique_ptr<SNSCoordinator::Stub> coord_stub_;
 
         IReply Login();
         IReply List();
@@ -64,22 +71,27 @@ class Client : public IClient
 
 int main(int argc, char** argv) {
 
-    std::string hostname = "localhost";
-    std::string username = "default";
-    std::string port = "3010";
-    
+    std::string hostname = "0.0.0.0";
+    std::string port = "8000";
+    std::string username = "-1";
+
     int opt = 0;
-    while ((opt = getopt(argc, argv, "h:u:p:")) != -1){
+    while ((opt = getopt(argc, argv, "c:p:i:")) != -1){
         switch(opt) {
-            case 'h':
+            case 'c':
                 hostname = optarg;break;
-            case 'u':
-                username = optarg;break;
             case 'p':
                 port = optarg;break;
+            case 'i':
+                username = optarg;break;
             default:
                 std::cerr << "Invalid Command Line Argument\n";
         }
+    }
+
+    if (username == "-1") {
+        std::cout << "Please enter an id! (-i)";
+        return -1;
     }
 
     std::string log_file_name = std::string("client-") + username;
@@ -110,12 +122,23 @@ int Client::connectTo()
 	// ------------------------------------------------------------
 
     // Contact C for server IP and Port
+    std::string coord_info = hostname + ":" + port;
+    coord_stub_ = std::unique_ptr<SNSCoordinator::Stub>(SNSCoordinator::NewStub(grpc::CreateChannel(coord_info, grpc::InsecureChannelCredentials())));
 
+    ClientContext ctx;
+    Server server;
+    User user;
+    user.set_user_id(std::stoi(username));
+    Status status = coord_stub_->GetServer(&ctx, user, &server);
+
+    if (!status.ok()) {
+        log(INFO, "GetServer failed")
+        return -1;
+    }
 
     // Connect to returned master server
-
-
-    std::string login_info = hostname + ":" + port;
+    displayReConnectionMessage(server.server_ip(), server.port_num());
+    std::string login_info = server.server_ip() + ":" + server.port_num();
     stub_ = std::unique_ptr<SNSService::Stub>(SNSService::NewStub(grpc::CreateChannel(login_info, grpc::InsecureChannelCredentials())));
 
     IReply ire = Login();

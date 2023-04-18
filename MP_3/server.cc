@@ -150,28 +150,6 @@ class SNSServiceImpl final : public SNSService::Service {
         // log(INFO, "Follow Request - " + reply->msg());
         return Status::OK; 
     }
-
-    // Unfollow unsupported
-    // Status UnFollow(ServerContext* context, const Request* request, Reply* reply) override {
-    //     log(INFO,"Serving Unfollow Request");
-    //     std::string username1 = request->username();
-    //     std::string username2 = request->arguments(0);
-    //     int leave_index = find_user(username2);
-    //     if(leave_index < 0 || username1 == username2)
-    //         reply->set_msg("Leave Failed -- Invalid Username");
-    //     else {
-    //         Client *user1 = &client_db[find_user(username1)];
-    //         Client *user2 = &client_db[leave_index];
-    //         if(std::find(user1->client_following.begin(), user1->client_following.end(), user2) == user1->client_following.end()){
-    //             reply->set_msg("Leave Failed -- Not Following User");
-    //             return Status::OK;
-    //         }
-    //         user1->client_following.erase(find(user1->client_following.begin(), user1->client_following.end(), user2)); 
-    //         user2->client_followers.erase(find(user2->client_followers.begin(), user2->client_followers.end(), user1));
-    //         reply->set_msg("Leave Successful");
-    //     }
-    //     return Status::OK;
-    // }
   
     Status Login(ServerContext* context, const Request* request, Reply* reply) override {
         log(INFO,"Serving Login Request - " + request->username());
@@ -368,10 +346,6 @@ int main(int argc, char** argv) {
     std::string coord_login = caddr + ":" + cport;
     coord_stub_ = std::unique_ptr<SNSCoordinator::Stub>(SNSCoordinator::NewStub(grpc::CreateChannel(coord_login, grpc::InsecureChannelCredentials())));
 
-    // Create heartbeat
-    // Heartbeat* beat = new Heartbeat();
-    // beat->set_server_id(std::stoi(id));
-    // log(INFO, id);
     ServerType type;
     if (t == "master") {
         type = MASTER;
@@ -379,9 +353,6 @@ int main(int argc, char** argv) {
     else if (t == "slave") {
         type = SLAVE;
     }
-    // beat->set_server_type(type);
-    // beat->set_server_ip("0.0.0.0");
-    // beat->set_server_port(port);
 
     // Start heartbeat thread
     std::thread hb(heartbeat_thread, std::stoi(id), type, "0.0.0.0", port);
