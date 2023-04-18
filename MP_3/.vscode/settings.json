@@ -73,7 +73,9 @@
         "scoped_allocator": "cpp",
         "typeindex": "cpp",
         "valarray": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "codecvt": "cpp",
+        "ranges": "cpp"
     },
     "explorer.sortOrder": "type"
 }

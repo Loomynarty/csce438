@@ -5,10 +5,11 @@
 #include <string>
 #include <unistd.h>
 #include <grpc++/grpc++.h>
-#include "client.h"
+#include <signal.h>
 #include <glog/logging.h>
-#define log(severity, msg) LOG(severity) << msg; google::FlushLogFiles(google::severity); 
+#define glog(severity, msg) LOG(severity) << msg; google::FlushLogFiles(google::severity); 
 
+#include "client.h"
 #include "sns.grpc.pb.h"
 #include "coordinator.grpc.pb.h"
 using grpc::Channel;
@@ -125,11 +126,13 @@ int Client::connectTo()
     std::string coord_info = hostname + ":" + port;
     coord_stub_ = std::unique_ptr<SNSCoordinator::Stub>(SNSCoordinator::NewStub(grpc::CreateChannel(coord_info, grpc::InsecureChannelCredentials())));
 
+    glog(INFO, "Fetching Server");
     ClientContext ctx;
     Server server;
     User user;
     user.set_user_id(std::stoi(username));
     Status status = coord_stub_->GetServer(&ctx, user, &server);
+    glog(INFO, "Received");
 
     if (!status.ok()) {
         log(INFO, "GetServer failed")
@@ -337,7 +340,7 @@ void Client::Timeline(const std::string& username) {
 
     //Thread used to read chat messages and send them to the server
     std::thread writer([username, stream]() {
-        std::string input = "Set Stream";
+        std::string input = "INIT";
         Message m = MakeMessage(username, input);
         stream->Write(m);
         while (1) {
