@@ -305,19 +305,15 @@ class SNSServiceImpl final : public SNSService::Service
     {
         glog(INFO, "Serving List Request");
         User* user = user_db[find_user(request->username())];
-        glog(INFO, user->followers.size());
-        glog(INFO, user->following.size());
 
         // Add all users in the db
         for (User* c : user_db)
         {
-            glog(INFO, "Users Found: " + c->username);
             list_reply->add_all_users(c->username);
         }
 
         // Find users that are followers of user
         for (User* u : user->followers) {
-            glog(INFO, "Followers: " + u->username);
             list_reply->add_followers(u->username);
         }
 
@@ -363,9 +359,17 @@ class SNSServiceImpl final : public SNSService::Service
 
     Status Login(ServerContext *context, const Request *request, Reply *reply) override
     {
-        glog(INFO, "Serving Login Request - " + request->username());
         User* c;
         std::string username = request->username();
+
+        // Catch SIGINT case - flip connected to false;
+        if (!request->arguments().empty()) {
+            // glog(INFO, "Client SIGINT - " + request->username());
+            user_db[find_user(username)]->connected = false;
+            return Status::CANCELLED;
+        }
+
+        glog(INFO, "Serving Login Request - " + request->username());
         int user_index = find_user(username);
         if (user_index < 0)
         {   
@@ -381,9 +385,6 @@ class SNSServiceImpl final : public SNSService::Service
         {
             User *user = user_db[user_index];
 
-            // TODO - temp fix
-            user->connected = false;
-
             if (user->connected)
                 reply->set_msg("You have already logged in!");
             else
@@ -393,93 +394,9 @@ class SNSServiceImpl final : public SNSService::Service
                 user->connected = true;
             }
         }
-        // log(INFO, "Login Request - " + reply->msg());
+        // glog(INFO, "Login Request - " + reply->msg());
         return Status::OK;
     }
-
-    /*
-
-    Status Timeline(ServerContext *context, ServerReaderWriter<Message, Message> *stream) override
-    {
-        log(INFO, "Serving Timeline Request");
-        Message message;
-        User* c;
-        while (stream->Read(&message))
-        {
-            std::string username = message.username();
-            int user_index = find_user(username);
-            c = &user_db[user_index];
-
-            // Write the current message to "username.txt"
-            std::string filename = username + ".txt";
-            std::ofstream user_file(filename, std::ios::app | std::ios::out | std::ios::in);
-            Timestamp temptime = message.timestamp();
-            std::string time = TimeUtil::ToString(temptime);
-            std::string fileinput = time + " :: " + message.username() + ":" + message.msg() + "\n";
-
-            //"Set Stream" is the default message from the client to initialize the stream
-            if (message.msg() != "Set Stream")
-                user_file << fileinput;
-
-            // If message = "Set Stream", print the first 20 chats from the people you follow
-            else
-            {
-                if (c->stream == 0)
-                    c->stream = stream;
-                std::string line;
-                std::vector<std::string> newest_twenty;
-                std::ifstream in(username + "following.txt");
-                int count = 0;
-
-                // Read the last up-to-20 lines (newest 20 messages) from userfollowing.txt
-                while (getline(in, line))
-                {
-                    if (c->following_file_size > 20)
-                    {
-                        if (count < c->following_file_size - 20)
-                        {
-                            count++;
-                            continue;
-                        }
-                    }
-                    newest_twenty.push_back(line);
-                }
-                Message new_msg;
-
-                // Send the newest messages to the client to be displayed
-                for (int i = 0; i < newest_twenty.size(); i++)
-                {
-                    new_msg.set_msg(newest_twenty[i]);
-                    stream->Write(new_msg);
-                }
-                continue;
-            }
-
-            // Send the message to each follower's stream
-            std::vector<Client *>::const_iterator it;
-            for (it = c->client_followers.begin(); it != c->client_followers.end(); it++)
-            {
-                Client *temp_client = *it;
-                if (temp_client->stream != 0 && temp_client->connected)
-                    temp_client->stream->Write(message);
-
-                // For each of the current user's followers, put the message in their following.txt file
-                std::string temp_username = temp_client->username;
-                std::string temp_file = temp_username + "following.txt";
-                std::ofstream following_file(temp_file, std::ios::app | std::ios::out | std::ios::in);
-                following_file << fileinput;
-                temp_client->following_file_size++;
-                std::ofstream user_file(temp_username + ".txt", std::ios::app | std::ios::out | std::ios::in);
-                user_file << fileinput;
-            }
-        }
-
-        // If the client disconnected from Chat Mode, set connected to false
-        c->connected = false;
-        return Status::OK;
-    }
-
-    */
 
     Status Timeline(ServerContext *context, ServerReaderWriter<Message, Message> *stream) override
     {

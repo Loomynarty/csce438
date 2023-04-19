@@ -27,6 +27,11 @@ using snsCoordinator::SNSCoordinator;
 using snsCoordinator::User;
 using snsCoordinator::Server;
 
+// Login info for the master server
+// TODO - fix for slave switch
+std::string login_info;
+std::string username = "-1";
+
 Message MakeMessage(const std::string& username, const std::string& msg) {
     Message m;
     m.set_username(username);
@@ -36,6 +41,21 @@ Message MakeMessage(const std::string& username, const std::string& msg) {
     timestamp->set_nanos(0);
     m.set_allocated_timestamp(timestamp);
     return m;
+}
+
+// Signal the server that the client has SIGINTed - connected = false
+void sig_handler(int sig) {
+    ClientContext ctx;
+    Request request;
+    Reply reply;
+    
+    request.set_username(username);
+    request.add_arguments("SIGINT");
+
+    std::unique_ptr<SNSService::Stub> stub = std::unique_ptr<SNSService::Stub>(SNSService::NewStub(grpc::CreateChannel(login_info, grpc::InsecureChannelCredentials())));
+    Status status = stub->Login(&ctx, request, &reply);
+
+    exit(0);
 }
 
 class Client : public IClient
@@ -74,8 +94,7 @@ int main(int argc, char** argv) {
 
     std::string hostname = "0.0.0.0";
     std::string port = "8000";
-    std::string username = "-1";
-
+    
     int opt = 0;
     while ((opt = getopt(argc, argv, "c:p:i:")) != -1){
         switch(opt) {
@@ -103,6 +122,9 @@ int main(int argc, char** argv) {
     google::InitGoogleLogging(log_file_name.c_str());
     log(INFO, "Logging Initialized. Client starting...");
     
+    // Handle SIGINT
+    signal(SIGINT, sig_handler);
+
     // You MUST invoke "run_client" function to start business logic
     Client myc(hostname, username, port);
     myc.run_client();
@@ -141,7 +163,7 @@ int Client::connectTo()
 
     // Connect to returned master server
     displayReConnectionMessage(server.server_ip(), server.port_num());
-    std::string login_info = server.server_ip() + ":" + server.port_num();
+    login_info = server.server_ip() + ":" + server.port_num();
     stub_ = std::unique_ptr<SNSService::Stub>(SNSService::NewStub(grpc::CreateChannel(login_info, grpc::InsecureChannelCredentials())));
 
     IReply ire = Login();
