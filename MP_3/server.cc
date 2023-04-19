@@ -46,7 +46,10 @@
 #include <google/protobuf/util/time_util.h>
 #include <grpc++/grpc++.h>
 #include <glog/logging.h>
-#define glog(severity, msg) LOG(severity) << msg; google::FlushLogFiles(google::severity); 
+#include <sys/stat.h>
+#define glog(severity, msg) \
+    LOG(severity) << msg;   \
+    google::FlushLogFiles(google::severity);
 
 #include "sns.grpc.pb.h"
 #include "coordinator.grpc.pb.h"
@@ -84,14 +87,15 @@ using json = nlohmann::ordered_json;
 std::string port = "-1";
 std::string id = "-1";
 std::string t = "-1";
-std::string data_location = "data.json";
+std::string follow_location = "follow.json";
+std::string timeline_location = "timeline.json";
 
 struct User
 {
     std::string username;
-    bool connected = true;
-    std::vector<User*> followers;
-    std::vector<User*> following;
+    bool connected = false;
+    std::vector<User *> followers;
+    std::vector<User *> following;
     ServerReaderWriter<Message, Message> *stream = 0;
     bool operator==(const User &c1) const
     {
@@ -103,13 +107,13 @@ struct User
 std::unique_ptr<SNSCoordinator::Stub> coord_stub_;
 
 // Vector that stores every client that has been created
-std::vector<User*> user_db;
+std::vector<User *> user_db;
 
 // Helper function used to find a Client object given its username
 int find_user(std::string username)
 {
     int index = 0;
-    for (User* c : user_db)
+    for (User *c : user_db)
     {
         if (c->username == username)
             return index;
@@ -119,10 +123,10 @@ int find_user(std::string username)
 }
 
 // Check if user -> follow_username
-int find_following(User* user, std::string following_username)
-{   
+int find_following(User *user, std::string following_username)
+{
     int index = 0;
-    for (User* c : user->following)
+    for (User *c : user->following)
     {
         if (c->username == following_username)
         {
@@ -133,76 +137,86 @@ int find_following(User* user, std::string following_username)
     return -1;
 }
 
-void UpdateJSON(json j)
+void UpdateJSON(json j, std::string location)
 {
-    std::ofstream ofs(data_location);
+    // glog(INFO, "Updating json");
+    std::ofstream ofs(location);
     ofs << std::setw(4) << j << std::endl;
     ofs.close();
 }
 
 // Add a new user to data.json
-void CreateUserJSON(std::string username) {
-  // std::cout << "adding " << username << " to storage\n";
-  
-  // Load data.json
-  std::ifstream file(data_location);
-  json j = json::parse(file);
-  file.close();
+void CreateUserJSON(std::string username)
+{
+    // glog(INFO, "Updating user json");
 
-  // Create user object
-  json user_data;
-  user_data["username"] = username;
-  user_data["following"] = json::object();
-  j["users"][username] = user_data;
+    // Load data.json
+    std::ifstream file(follow_location);
+    json j = json::parse(file);
+    file.close();
 
-  UpdateJSON(j);
+    // Create user object
+    json user_data;
+    user_data["username"] = username;
+    user_data["following"] = json::object();
+    j["users"][username] = user_data;
+
+    UpdateJSON(j, follow_location);
 }
 
-void FollowUserJSON(std::string username, std::string username_to_follow) {
-  // std::cout << username << " -> " << username_to_follow << " to storage\n";
-  
-  // Load data.json
-  std::ifstream file(data_location);
-  json j = json::parse(file);
-  file.close();
-  
-  Timestamp* timestamp = new Timestamp();
-  timestamp->set_seconds(time(NULL));
-  timestamp->set_nanos(0);
+void FollowUserJSON(std::string username, std::string username_to_follow)
+{
 
-  json follow_data;
-  follow_data["username"] = username_to_follow;
-  follow_data["timestamp"] = timestamp->seconds();
+    // Load data.json
+    std::ifstream file(follow_location);
+    json j = json::parse(file);
+    file.close();
 
-  // Update json
-  j["users"][username]["following"][username_to_follow] = follow_data; 
-  
-  UpdateJSON(j);
+    Timestamp *timestamp = new Timestamp();
+    timestamp->set_seconds(time(NULL));
+    timestamp->set_nanos(0);
+
+    json follow_data;
+    follow_data["username"] = username_to_follow;
+    follow_data["timestamp"] = timestamp->seconds();
+
+    // Update json
+    j["users"][username]["following"][username_to_follow] = follow_data;
+
+    UpdateJSON(j, follow_location);
 }
 
-void TimelineJSON(Message message, Timestamp* timestamp) {
-  // std::cout << "writing post to storage\n";
-  std::string username = message.username();
+void TimelineJSON(Message message, Timestamp *timestamp)
+{
+    std::string username = message.username();
 
-  // Load data.json
-  std::ifstream file(data_location);
-  json j = json::parse(file);
-  file.close();
+    // Load data.json
+    std::ifstream file(timeline_location);
+    json j = json::parse(file);
+    file.close();
 
-  json post = json::object();
-  post["message"] = message.msg();
-  post["username"] = message.username();
-  post["timestamp"] = timestamp->seconds();
-  j["posts"].push_back(post);
+    json post = json::object();
+    post["message"] = message.msg();
+    post["username"] = message.username();
+    post["timestamp"] = timestamp->seconds();
+    j["posts"].push_back(post);
 
-  UpdateJSON(j);
+    UpdateJSON(j, timeline_location);
 }
 
+void CreateEmptyData() {
+    json fj = json::object();
+    json tj = json::object();
+    fj["users"] = json::object();
+    tj["posts"] = json::array();
+    UpdateJSON(fj, follow_location);
+    UpdateJSON(tj, timeline_location);
+}
 
 // Load inital data - assumes empty local db
 void LoadInitialData()
 {
-    std::ifstream file(data_location);
+    std::ifstream file(follow_location);
     json j;
 
     if (file.is_open())
@@ -212,13 +226,7 @@ void LoadInitialData()
         if (file.peek() == std::ifstream::traits_type::eof())
         {
             file.close();
-
-            // Update data.json with an empty array
-            j = json::object();
-            j["users"] = json::object();
-            j["posts"] = json::array();
-            UpdateJSON(j);
-
+            CreateEmptyData();
             return;
         }
 
@@ -229,19 +237,20 @@ void LoadInitialData()
         for (auto user_data : j["users"])
         {
             // Find user in local db
-            User* user;
+            User *user;
             std::string uname = user_data["username"];
             int user_index = find_user(uname);
 
             // Create the user if not found
             if (user_index == -1)
-            {   
+            {
                 user = new User;
                 user->username = uname;
                 user_db.push_back(user);
             }
             // Grab the user in the local database
-            else {
+            else
+            {
                 user = user_db[user_index];
             }
 
@@ -249,7 +258,7 @@ void LoadInitialData()
             for (auto following_data : user_data["following"])
             {
                 std::string follow_username = following_data["username"];
-                User* user2;
+                User *user2;
                 glog(INFO, "Adding " + uname + " -> " + follow_username);
 
                 // Find user_to_follow in local db
@@ -263,27 +272,20 @@ void LoadInitialData()
                     user_db.push_back(user2);
                 }
                 // Grab the user in the local database
-                else {
+                else
+                {
                     user2 = user_db[index];
                 }
 
-
                 // Check if already following
-                if ((find_following(user, follow_username)) < -1) {
+                if ((find_following(user, follow_username)) < -1)
+                {
                     glog(INFO, "Already Following");
                     continue;
                 }
 
                 user->following.push_back(user2);
                 user2->followers.push_back(user);
-
-                glog(INFO, "user_db: " + std::to_string(user_db.size()));
-                std::cout << user_db.at(0)->username << " ";
-                std::cout << user_db.at(0)->followers.size() << " ";
-                std::cout << user_db.at(0)->following.size() << "\n";
-                std::cout << user_db.at(1)->username << " ";
-                std::cout << user_db.at(1)->followers.size() << " ";
-                std::cout << user_db.at(1)->following.size() << "\n";
             }
         }
     }
@@ -291,10 +293,7 @@ void LoadInitialData()
     // Create data.json if it doesn't exist
     else
     {
-        j = json::object();
-        j["users"] = json::object();
-        j["posts"] = json::array();
-        UpdateJSON(j);
+        CreateEmptyData();
     }
 }
 
@@ -304,16 +303,17 @@ class SNSServiceImpl final : public SNSService::Service
     Status List(ServerContext *context, const Request *request, ListReply *list_reply) override
     {
         glog(INFO, "Serving List Request");
-        User* user = user_db[find_user(request->username())];
+        User *user = user_db[find_user(request->username())];
 
         // Add all users in the db
-        for (User* c : user_db)
+        for (User *c : user_db)
         {
             list_reply->add_all_users(c->username);
         }
 
         // Find users that are followers of user
-        for (User* u : user->followers) {
+        for (User *u : user->followers)
+        {
             list_reply->add_followers(u->username);
         }
 
@@ -327,7 +327,7 @@ class SNSServiceImpl final : public SNSService::Service
         glog(INFO, "Serving Follow Request - " + username1 + " -> " + username2);
 
         int join_index = find_user(username2);
-        
+
         // Prevent self follow or a user that isn't in the db
         if (join_index < 0 || username1 == username2)
         {
@@ -359,11 +359,12 @@ class SNSServiceImpl final : public SNSService::Service
 
     Status Login(ServerContext *context, const Request *request, Reply *reply) override
     {
-        User* c;
+        User *c;
         std::string username = request->username();
 
         // Catch SIGINT case - flip connected to false;
-        if (!request->arguments().empty()) {
+        if (!request->arguments().empty())
+        {
             // glog(INFO, "Client SIGINT - " + request->username());
             user_db[find_user(username)]->connected = false;
             return Status::CANCELLED;
@@ -372,7 +373,7 @@ class SNSServiceImpl final : public SNSService::Service
         glog(INFO, "Serving Login Request - " + request->username());
         int user_index = find_user(username);
         if (user_index < 0)
-        {   
+        {
             c = new User;
             c->username = username;
             user_db.push_back(c);
@@ -394,7 +395,7 @@ class SNSServiceImpl final : public SNSService::Service
                 user->connected = true;
             }
         }
-        // glog(INFO, "Login Request - " + reply->msg());
+        glog(INFO, "Login Request - " + reply->msg());
         return Status::OK;
     }
 
@@ -422,7 +423,6 @@ class SNSServiceImpl final : public SNSService::Service
 
                 init = false;
                 uname = message_recv.username();
-                std::cout << uname << "\n";
                 user_index = find_user(uname);
                 user = user_db[user_index];
 
@@ -435,12 +435,15 @@ class SNSServiceImpl final : public SNSService::Service
                 int count = 0;
 
                 // Load json
-                std::ifstream file(data_location);
-                json j = json::parse(file);
-                file.close();
+                std::ifstream ffile(follow_location);
+                std::ifstream tfile(timeline_location);
+                json follow_json = json::parse(ffile);
+                json time_json = json::parse(tfile);
+                ffile.close();
+                tfile.close();
 
                 // Get the recent 20 messages
-                json posts = j["posts"];
+                json posts = time_json["posts"];
                 for (auto it = posts.rbegin(); it != posts.rend(); it++)
                 {
                     if (count >= 20)
@@ -450,7 +453,8 @@ class SNSServiceImpl final : public SNSService::Service
 
                     std::string message_username = (*it)["username"];
                     if (uname != message_username)
-                    {
+                    {   
+                        
                         // Check if username is followed
                         if (find_following(user, message_username) < 0)
                         {
@@ -458,9 +462,8 @@ class SNSServiceImpl final : public SNSService::Service
                         }
 
                         // Check if message is after follow age
-                        int64_t follow_age = j["users"][uname]["following"][message_username]["timestamp"];
+                        int64_t follow_age = follow_json["users"][uname]["following"][message_username]["timestamp"];
                         int64_t message_seconds = (*it)["timestamp"];
-
                         if (follow_age > message_seconds)
                         {
                             continue;
@@ -554,8 +557,6 @@ void RunServer(std::string port_no)
     std::cout << "Server listening on " << server_address << std::endl;
     glog(INFO, "Server listening on " + server_address);
 
-    LoadInitialData();
-
     server->Wait();
 }
 
@@ -627,6 +628,15 @@ int main(int argc, char **argv)
     {
         type = SLAVE;
     }
+
+    // Create folders for this server
+    std::string folder_name = t + id;
+    int status = mkdir(folder_name.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+
+    follow_location = folder_name + "/" + follow_location;
+    timeline_location = folder_name + "/" + timeline_location;
+    LoadInitialData();
+
 
     // Start heartbeat thread
     std::thread hb(heartbeat_thread, std::stoi(id), type, "0.0.0.0", port);

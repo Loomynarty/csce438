@@ -90,48 +90,6 @@ class Client : public IClient
 
 };
 
-int main(int argc, char** argv) {
-
-    std::string hostname = "0.0.0.0";
-    std::string port = "8000";
-    
-    int opt = 0;
-    while ((opt = getopt(argc, argv, "c:p:i:")) != -1){
-        switch(opt) {
-            case 'c':
-                hostname = optarg;break;
-            case 'p':
-                port = optarg;break;
-            case 'i':
-                username = optarg;break;
-            default:
-                std::cerr << "Invalid Command Line Argument\n";
-        }
-    }
-
-    if (username == "-1") {
-        std::cout << "Please enter an id! (-i)";
-        return -1;
-    }
-
-    std::string log_file_name = std::string("client-") + username;
-
-    // Also log to the terminal
-    // FLAGS_alsologtostderr = 1;
-
-    google::InitGoogleLogging(log_file_name.c_str());
-    log(INFO, "Logging Initialized. Client starting...");
-    
-    // Handle SIGINT
-    signal(SIGINT, sig_handler);
-
-    // You MUST invoke "run_client" function to start business logic
-    Client myc(hostname, username, port);
-    myc.run_client();
-
-    return 0;
-}
-
 int Client::connectTo()
 {
 	// ------------------------------------------------------------
@@ -385,5 +343,47 @@ void Client::Timeline(const std::string& username) {
     //Wait for the threads to finish
     writer.join();
     reader.join();
+}
+
+int main(int argc, char** argv) {
+
+    std::string hostname = "0.0.0.0";
+    std::string port = "8000";
+    
+    int opt = 0;
+    while ((opt = getopt(argc, argv, "c:p:i:")) != -1){
+        switch(opt) {
+            case 'c':
+                hostname = optarg;break;
+            case 'p':
+                port = optarg;break;
+            case 'i':
+                username = optarg;break;
+            default:
+                std::cerr << "Invalid Command Line Argument\n";
+        }
+    }
+
+    if (username == "-1") {
+        std::cout << "Please enter an id! (-i)";
+        return -1;
+    }
+
+    std::string log_file_name = std::string("client-") + username;
+
+    // Also log to the terminal
+    FLAGS_alsologtostderr = 1;
+
+    google::InitGoogleLogging(log_file_name.c_str());
+    log(INFO, "Logging Initialized. Client starting...");
+    
+    // Handle SIGINT
+    signal(SIGINT, sig_handler);
+
+    // You MUST invoke "run_client" function to start business logic
+    Client myc(hostname, username, port);
+    myc.run_client();
+
+    return 0;
 }
 

@@ -39,7 +39,7 @@ server: coordinator.pb.o coordinator.grpc.pb.o sns.pb.o sns.grpc.pb.o server.o
 	$(PROTOC) -I.:/home/csce438/grpc/third_party/protobuf/src --cpp_out=. $<
 
 clean:
-	rm -f *.txt *.o *.pb.cc *.pb.h client server coordinator followsync data.json
+	rm -rf *.txt *.o *.pb.cc *.pb.h client server coordinator followsync master*/
 
 
 # The following is to test your system and ensure a smoother experience.
