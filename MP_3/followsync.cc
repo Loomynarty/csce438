@@ -65,16 +65,37 @@ void RunSync(std::string port_no) {
 }
 
 int main(int argc, char** argv) {
-    std::string port = "3010";
+
+    // Coordinator default location
+    std::string caddr = "0.0.0.0";
+    std::string cport = "8000";
+
+    std::string port = "-1";
 
     int opt = 0;
-    while ((opt = getopt(argc, argv, "p:")) != -1){
-        switch(opt) {
-            case 'p':
-            port = optarg;break;
-            default:
+    while ((opt = getopt(argc, argv, "c:o:p:i:")) != -1){
+        switch (opt) {
+        case 'c':
+            caddr = optarg;
+            break;
+        case 'o':
+            cport = optarg;
+            break;
+        case 'p':
+            port = optarg;
+            break;
+        case 'i':
+            id = optarg;
+            break;
+        default:
             std::cerr << "Invalid Command Line Argument\n";
         }
+    }
+
+    if (port == "-1")
+    {
+        std::cout << "Please enter a port! (-p)";
+        return -1;
     }
 
     std::string log_file_name = std::string("followsync-") + port;
