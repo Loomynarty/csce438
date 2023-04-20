@@ -69,8 +69,8 @@ int main(int argc, char** argv) {
     // Coordinator default location
     std::string caddr = "0.0.0.0";
     std::string cport = "8000";
-
     std::string port = "-1";
+    std::string id = "-1";
 
     int opt = 0;
     while ((opt = getopt(argc, argv, "c:o:p:i:")) != -1){
@@ -95,6 +95,11 @@ int main(int argc, char** argv) {
     if (port == "-1")
     {
         std::cout << "Please enter a port! (-p)";
+        return -1;
+    }
+    if (id == "-1")
+    {
+        std::cout << "Please enter an id! (-i)";
         return -1;
     }
 
