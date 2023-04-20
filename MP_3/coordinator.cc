@@ -98,12 +98,17 @@ class SNSCoordinatorImpl final : public SNSCoordinator::Service {
         log(INFO, "Connected masters: " + std::to_string(master_table.size()))
         Heartbeat beat;
         while (stream->Read(&beat)) {
-            log(INFO, "Received Heartbeat - Server " + std::to_string(beat.server_id()));
-            // log(INFO, "Server ID: " + std::to_string(beat.server_id()));
-            // log(INFO, "Server Type: " + std::to_string(beat.server_type()));
-            // log(INFO, "Server Location: " + beat.server_ip() + ":" + beat.server_port());
-            // log(INFO, "Timestamp: " + TimeUtil::ToString(beat.timestamp()));
-
+            switch(beat.server_type()) {
+                case MASTER:
+                    log(INFO, "Received Heartbeat - Master " + std::to_string(beat.server_id()));
+                    break;
+                case SLAVE:
+                    log(INFO, "Received Heartbeat - Slave " + std::to_string(beat.server_id()));
+                    break;
+                default:
+                    log(INFO, "Received Heartbeat");
+                    break;
+            }
 
             // a) if first heartbeat, add to master / slave server db 
             // create a timer for 20 seconds tied to the server
@@ -161,7 +166,7 @@ class SNSCoordinatorImpl final : public SNSCoordinator::Service {
     Status GetServer(ServerContext* context, const User* user, Server* server) {
 
         int id = user->user_id() % 3;
-        log(INFO, "Fetching server...id " + std::to_string(id));
+        log(INFO, "Fetching server... id " + std::to_string(id));
         // TODO - Risky access
         server_t s = master_table.at(id);
 

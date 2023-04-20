@@ -326,6 +326,8 @@ class SNSServiceImpl final : public SNSService::Service
         std::string username2 = request->arguments(0);
         glog(INFO, "Serving Follow Request - " + username1 + " -> " + username2);
 
+        // Copy operation to slave
+
         int join_index = find_user(username2);
 
         // Prevent self follow or a user that isn't in the db
@@ -371,6 +373,9 @@ class SNSServiceImpl final : public SNSService::Service
         }
 
         glog(INFO, "Serving Login Request - " + request->username());
+
+        // Copy operation to slave
+
         int user_index = find_user(username);
         if (user_index < 0)
         {
@@ -407,6 +412,10 @@ class SNSServiceImpl final : public SNSService::Service
         // and then making it available on his/her follower's streams
         // ------------------------------------------------------------
         glog(INFO, "Serving Timeline Request");
+
+        // Copy operation to slave
+
+
         Message message_recv;
         Message message_send;
         std::string uname;
@@ -630,7 +639,7 @@ int main(int argc, char **argv)
     }
 
     // Create folders for this server
-    std::string folder_name = t + id;
+    std::string folder_name = t + "_" +  id;
     int status = mkdir(folder_name.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 
     follow_location = folder_name + "/" + follow_location;
