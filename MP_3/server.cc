@@ -334,6 +334,14 @@ class SNSServiceImpl final : public SNSService::Service
         glog(INFO, "Serving Follow Request - " + username1 + " -> " + username2);
 
         // Copy operation to slave
+        if (type == MASTER) {
+            ClientContext ctx;
+            Request req;
+            req.set_username(username1);
+            req.add_arguments(username2);
+            Reply rep;
+            slave_stub_->Follow(&ctx, req, &rep);
+        }
 
 
         int join_index = find_user(username2);
@@ -427,9 +435,13 @@ class SNSServiceImpl final : public SNSService::Service
         // and then making it available on his/her follower's streams
         // ------------------------------------------------------------
         glog(INFO, "Serving Timeline Request");
-
+        ClientContext ctx;
+        std::shared_ptr<ClientReaderWriter<Message, Message>> slave_stream;
+        
         // Copy operation to slave
-
+        if (type == MASTER) {
+            slave_stream = std::shared_ptr<ClientReaderWriter<Message, Message>>(slave_stub_->Timeline(&ctx));
+        }
 
         Message message_recv;
         Message message_send;
@@ -440,6 +452,11 @@ class SNSServiceImpl final : public SNSService::Service
         while (stream->Read(&message_recv))
         {
             User *user;
+
+            // Copy to slave
+            if (type == MASTER) {
+                slave_stream->Write(message_recv);
+            }
 
             // Check if inital setup
             if (message_recv.msg() == "INIT" && init)
