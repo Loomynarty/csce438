@@ -18,10 +18,10 @@ GRPC_CPP_PLUGIN_PATH ?= `which $(GRPC_CPP_PLUGIN)`
 
 all: system-check coordinator followsync client server 
 
-followsync: sns.pb.o sns.grpc.pb.o followsync.pb.o followsync.grpc.pb.o followsync.o 
+coordinator: sns.pb.o sns.grpc.pb.o coordinator.pb.o coordinator.grpc.pb.o coordinator.o 
 	$(CXX) $^ $(LDFLAGS) -g -o $@
 
-coordinator: sns.pb.o sns.grpc.pb.o coordinator.pb.o coordinator.grpc.pb.o coordinator.o 
+followsync: coordinator.pb.o coordinator.grpc.pb.o sns.pb.o sns.grpc.pb.o followsync.pb.o followsync.grpc.pb.o followsync.o 
 	$(CXX) $^ $(LDFLAGS) -g -o $@
 
 client: coordinator.pb.o coordinator.grpc.pb.o sns.pb.o sns.grpc.pb.o client.o

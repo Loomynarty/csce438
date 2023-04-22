@@ -54,6 +54,7 @@ void sig_handler(int sig) {
 
     std::unique_ptr<SNSService::Stub> stub = std::unique_ptr<SNSService::Stub>(SNSService::NewStub(grpc::CreateChannel(login_info, grpc::InsecureChannelCredentials())));
     Status status = stub->Login(&ctx, request, &reply);
+    std::cout << "\n";
 
     exit(0);
 }

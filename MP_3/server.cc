@@ -86,10 +86,15 @@ using json = nlohmann::ordered_json;
 // Server info
 std::string port = "-1";
 std::string id = "-1";
-// std::string t = "-1";
 ServerType type;
 std::string follow_location = "follow.json";
 std::string timeline_location = "timeline.json";
+
+// Last update check
+Timestamp last_update;
+
+// Number of seconds for the master to check if any files have been updated
+int update_time = 30;
 
 // Slave info
 std::string slave_info = "-1";
@@ -220,8 +225,8 @@ void CreateEmptyData() {
     UpdateJSON(tj, timeline_location);
 }
 
-// Load inital data - assumes empty local db
-void LoadInitialData()
+// Load follow data - assumes empty local db
+void LoadFollowData()
 {
     std::ifstream file(follow_location);
     json j;
@@ -317,6 +322,9 @@ class SNSServiceImpl final : public SNSService::Service
         {
             list_reply->add_all_users(c->username);
         }
+
+        // Add self to followers
+        list_reply->add_followers(user->username);
 
         // Find users that are followers of user
         for (User *u : user->followers)
@@ -586,6 +594,37 @@ void heartbeat_thread(int id, ServerType type, std::string ip, std::string port)
     }
 }
 
+void update_thread() {
+    // Initialize last_update
+    struct stat ffile_stat;
+    time_t previous_follow_mtime = 0;
+
+    if (stat(follow_location.c_str(), &ffile_stat) != 0) {
+        glog(ERROR, "Stat for follow file failed");
+        return;
+    }
+    previous_follow_mtime = ffile_stat.st_mtime;
+
+    while (true) {
+        // Sleep
+        std::this_thread::sleep_for(std::chrono::seconds(update_time));
+        glog(INFO, "Checking for updates...");
+
+        // Check if follow file was updated
+        if (stat(follow_location.c_str(), &ffile_stat) != 0) {
+            glog(ERROR, "Stat for follow file failed");
+            return;
+        }
+        if (previous_follow_mtime != ffile_stat.st_mtime) {
+            // Reload follow data
+            glog(INFO, "Follow file change detected - loading data");
+            LoadFollowData();
+            previous_follow_mtime = ffile_stat.st_mtime;
+        }
+    }
+
+}
+
 void RunServer(std::string port_no)
 {
     std::string server_address = "0.0.0.0:" + port_no;
@@ -677,10 +716,15 @@ int main(int argc, char **argv)
 
     follow_location = folder_name + "/" + follow_location;
     timeline_location = folder_name + "/" + timeline_location;
-    LoadInitialData();
+    LoadFollowData();
+
 
     // Start heartbeat thread
     std::thread hb(heartbeat_thread, std::stoi(id), type, "0.0.0.0", port);
+
+    // Start update thread
+    std::thread update(update_thread);
+
 
     // Get the slave server
     if (type == MASTER) {
@@ -703,6 +747,7 @@ int main(int argc, char **argv)
     // Start the server
     RunServer(port);
     hb.join();
+    update.join();
 
     return 0;
 }

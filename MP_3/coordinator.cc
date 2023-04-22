@@ -127,11 +127,11 @@ class SNSCoordinatorImpl final : public SNSCoordinator::Service {
                 switch(beat.server_type()) {
                     case MASTER:
                         master_table.push_back(s);
-                        log(INFO, "Connected masters: " + std::to_string(master_table.size()));
+                        // log(INFO, "Connected masters: " + std::to_string(master_table.size()));
                         break;
                     case SLAVE:
                         slave_table.push_back(s);
-                        log(INFO, "Connected slaves: " + std::to_string(slave_table.size()));
+                        // log(INFO, "Connected slaves: " + std::to_string(slave_table.size()));
                         break;
                     case SYNC:
                         sync_table.push_back(s);
@@ -149,9 +149,6 @@ class SNSCoordinatorImpl final : public SNSCoordinator::Service {
                     case SLAVE:
                         slave_table.at(index).timestamp = beat.timestamp();
                         break;
-                    case SYNC:
-                        master_table.at(index).timestamp = beat.timestamp();
-                        break;
                 }
             }
         }
@@ -161,12 +158,21 @@ class SNSCoordinatorImpl final : public SNSCoordinator::Service {
 
     Status GetFollowSyncsForUsers(ServerContext* context, const Users* users, FollowSyncs* syncs) override {
         log(INFO, "Fetching followsyncs...");
+
+        // Loop through all requested users
+        for (int i = 0; i < users->users_size(); i++) {
+            int id = ((users->users(i) - 1) % 3) + 1;
+            int index = find_server(id, SYNC);
+            server_t s = sync_table.at(index);
+            log(INFO, "Followsync for user " + std::to_string(users->users(i)) + "at " + std::to_string(index));
+        }
+
         return Status::OK;
     }
 
     Status GetServer(ServerContext* context, const User* user, Server* server) {
 
-        int id = (user->user_id() % 3) + 1;
+        int id = ((user->user_id() - 1) % 3) + 1;
         log(INFO, "Fetching server... id " + std::to_string(id));
         // TODO - Risky access
         int index = find_server(id, MASTER);
@@ -182,7 +188,6 @@ class SNSCoordinatorImpl final : public SNSCoordinator::Service {
 
     Status GetSlave(ServerContext*, const ClusterID* cid, Server* server) {
         log(INFO, "Fetching server... id " + std::to_string(cid->cluster()));
-
         int index = find_server(cid->cluster(), SLAVE);
         server_t s = slave_table.at(index);
 
