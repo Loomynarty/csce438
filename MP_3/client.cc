@@ -372,7 +372,7 @@ int main(int argc, char** argv) {
     std::string log_file_name = std::string("client-") + username;
 
     // Also log to the terminal
-    FLAGS_alsologtostderr = 1;
+    // FLAGS_alsologtostderr = 1;
 
     google::InitGoogleLogging(log_file_name.c_str());
     log(INFO, "Logging Initialized. Client starting...");

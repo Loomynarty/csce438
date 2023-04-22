@@ -95,7 +95,6 @@ int find_server(int id, ServerType type) {
 class SNSCoordinatorImpl final : public SNSCoordinator::Service {
     
     Status HandleHeartBeats(ServerContext* context, ServerReaderWriter<Heartbeat, Heartbeat>* stream) override {
-        log(INFO, "Connected masters: " + std::to_string(master_table.size()))
         Heartbeat beat;
         while (stream->Read(&beat)) {
             switch(beat.server_type()) {
@@ -128,12 +127,15 @@ class SNSCoordinatorImpl final : public SNSCoordinator::Service {
                 switch(beat.server_type()) {
                     case MASTER:
                         master_table.push_back(s);
+                        log(INFO, "Connected masters: " + std::to_string(master_table.size()));
                         break;
                     case SLAVE:
                         slave_table.push_back(s);
+                        log(INFO, "Connected slaves: " + std::to_string(slave_table.size()));
                         break;
                     case SYNC:
                         sync_table.push_back(s);
+                        log(INFO, "Connected syncs: " + std::to_string(sync_table.size()));
                         break;
                 }
             }
@@ -164,10 +166,11 @@ class SNSCoordinatorImpl final : public SNSCoordinator::Service {
 
     Status GetServer(ServerContext* context, const User* user, Server* server) {
 
-        int id = user->user_id() % 3;
+        int id = (user->user_id() % 3) + 1;
         log(INFO, "Fetching server... id " + std::to_string(id));
         // TODO - Risky access
-        server_t s = master_table.at(id);
+        int index = find_server(id, MASTER);
+        server_t s = master_table.at(index);
 
         server->set_server_ip(s.ip);   
         server->set_port_num(s.port);
@@ -178,7 +181,16 @@ class SNSCoordinatorImpl final : public SNSCoordinator::Service {
     }
 
     Status GetSlave(ServerContext*, const ClusterID* cid, Server* server) {
-        log(INFO, "Fetching slave...");
+        log(INFO, "Fetching server... id " + std::to_string(cid->cluster()));
+
+        int index = find_server(cid->cluster(), SLAVE);
+        server_t s = slave_table.at(index);
+
+        server->set_server_ip(s.ip);   
+        server->set_port_num(s.port);
+        server->set_server_id(index + 1);
+        server->set_server_type(s.type);   
+
         return Status::OK;
     }
 

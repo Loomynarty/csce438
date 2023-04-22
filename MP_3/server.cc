@@ -86,9 +86,13 @@ using json = nlohmann::ordered_json;
 // Server info
 std::string port = "-1";
 std::string id = "-1";
-std::string t = "-1";
+// std::string t = "-1";
+ServerType type;
 std::string follow_location = "follow.json";
 std::string timeline_location = "timeline.json";
+
+// Slave info
+std::string slave_info = "-1";
 
 struct User
 {
@@ -105,6 +109,9 @@ struct User
 
 // Coordinator Stub
 std::unique_ptr<SNSCoordinator::Stub> coord_stub_;
+
+// Slave Stub
+std::unique_ptr<SNSService::Stub> slave_stub_;
 
 // Vector that stores every client that has been created
 std::vector<User *> user_db;
@@ -328,6 +335,7 @@ class SNSServiceImpl final : public SNSService::Service
 
         // Copy operation to slave
 
+
         int join_index = find_user(username2);
 
         // Prevent self follow or a user that isn't in the db
@@ -375,6 +383,13 @@ class SNSServiceImpl final : public SNSService::Service
         glog(INFO, "Serving Login Request - " + request->username());
 
         // Copy operation to slave
+        if (type == MASTER) {
+            ClientContext ctx;
+            Request req;
+            req.set_username(username);
+            Reply rep;
+            slave_stub_->Login(&ctx, req, &rep);
+        }
 
         int user_index = find_user(username);
         if (user_index < 0)
@@ -575,6 +590,7 @@ int main(int argc, char **argv)
     // Coordinator default location
     std::string caddr = "0.0.0.0";
     std::string cport = "8000";
+    std::string t = "-1";
 
     int opt = 0;
     while ((opt = getopt(argc, argv, "c:o:p:i:t:")) != -1)
@@ -628,7 +644,7 @@ int main(int argc, char **argv)
     std::string coord_login = caddr + ":" + cport;
     coord_stub_ = std::unique_ptr<SNSCoordinator::Stub>(SNSCoordinator::NewStub(grpc::CreateChannel(coord_login, grpc::InsecureChannelCredentials())));
 
-    ServerType type;
+    
     if (t == "master")
     {
         type = MASTER;
@@ -640,15 +656,32 @@ int main(int argc, char **argv)
 
     // Create folders for this server
     std::string folder_name = t + "_" +  id;
-    int status = mkdir(folder_name.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+    mkdir(folder_name.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 
     follow_location = folder_name + "/" + follow_location;
     timeline_location = folder_name + "/" + timeline_location;
     LoadInitialData();
 
-
     // Start heartbeat thread
     std::thread hb(heartbeat_thread, std::stoi(id), type, "0.0.0.0", port);
+
+    // Get the slave server
+    if (type == MASTER) {
+        ClientContext ctx;
+        snsCoordinator::Server s;
+        snsCoordinator::ClusterID cid;
+        cid.set_cluster(std::stoi(id));
+        Status status = coord_stub_->GetSlave(&ctx, cid, &s);
+
+        if (!status.ok()) {
+            glog(ERROR, "GetSlave failed");
+            return 0;
+        }
+
+        slave_info = s.server_ip() + ":" + s.port_num();
+        // glog(INFO, "Slave info: " + slave_info);
+        slave_stub_ = std::unique_ptr<SNSService::Stub>(SNSService::NewStub(grpc::CreateChannel(slave_info, grpc::InsecureChannelCredentials())));
+    }
 
     // Start the server
     RunServer(port);

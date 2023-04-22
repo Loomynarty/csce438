@@ -18,11 +18,13 @@ sleep 1
 ./server -p 8040 -i 1 -t slave &
 ./server -p 8050 -i 2 -t slave &
 ./server -p 8060 -i 3 -t slave &
+sleep 1
 
 # Start master server processes
 ./server -p 8010 -i 1 -t master &
 ./server -p 8020 -i 2 -t master &
 ./server -p 8030 -i 3 -t master &
+sleep 1
 
 # Start followsync processes
 ./followsync -p 8070 -i 1 &
