@@ -109,7 +109,6 @@ class SNSCoordinatorImpl final : public SNSCoordinator::Service {
                     log(INFO, "Received Heartbeat");
                     break;
             }
-
             // a) if first heartbeat, add to master / slave server db 
             // create a timer for 20 seconds tied to the server
             // reset it if another heartbeat is received

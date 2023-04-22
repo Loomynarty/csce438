@@ -12,6 +12,7 @@ trap kill_processes SIGINT SIGTERM
 
 # Start coordinator process
 ./coordinator &
+sleep 1
 
 # Start slave server processes
 ./server -p 8040 -i 1 -t slave &
@@ -22,7 +23,6 @@ trap kill_processes SIGINT SIGTERM
 ./server -p 8010 -i 1 -t master &
 ./server -p 8020 -i 2 -t master &
 ./server -p 8030 -i 3 -t master &
-
 
 # Start followsync processes
 ./followsync -p 8070 -i 1 &

@@ -365,7 +365,7 @@ int main(int argc, char** argv) {
     }
 
     if (username == "-1") {
-        std::cout << "Please enter an id! (-i)";
+        std::cout << "Please enter an id! (-i)" << "\n";
         return -1;
     }
 
