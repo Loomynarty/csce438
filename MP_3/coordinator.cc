@@ -165,6 +165,11 @@ class SNSCoordinatorImpl final : public SNSCoordinator::Service {
             int index = find_server(id, SYNC);
             server_t s = sync_table.at(index);
             log(INFO, "Followsync for user " + std::to_string(users->users(i)) + "at " + std::to_string(index));
+
+            syncs->add_users(users->users(i));
+            syncs->add_follow_syncs(s.server_id);
+            syncs->add_follow_sync_ip(s.ip);
+            syncs->add_port_nums(s.port);
         }
 
         return Status::OK;

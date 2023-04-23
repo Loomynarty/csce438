@@ -160,8 +160,6 @@ void UpdateJSON(json j, std::string location)
 // Add a new user to data.json
 void CreateUserJSON(std::string username)
 {
-    // glog(INFO, "Updating user json");
-
     // Load data.json
     std::ifstream file(follow_location);
     json j = json::parse(file);
@@ -391,7 +389,18 @@ class SNSServiceImpl final : public SNSService::Service
         // Catch SIGINT case - flip connected to false;
         if (!request->arguments().empty())
         {
-            // glog(INFO, "Client SIGINT - " + request->username());
+            glog(INFO, "Client SIGINT - " + request->username());
+            // Copy to slave
+            if (type == MASTER) {
+                ClientContext ctx;
+                Request req;
+                req.set_username(username);
+                req.add_arguments("SIGINT");
+                Reply rep;
+
+                slave_stub_->Login(&ctx, req, &rep);
+            }
+
             user_db[find_user(username)]->connected = false;
             return Status::CANCELLED;
         }
@@ -448,6 +457,7 @@ class SNSServiceImpl final : public SNSService::Service
         
         // Copy operation to slave
         if (type == MASTER) {
+            glog(INFO, "Setting up slave_stream";)
             slave_stream = std::shared_ptr<ClientReaderWriter<Message, Message>>(slave_stub_->Timeline(&ctx));
         }
 
@@ -463,6 +473,7 @@ class SNSServiceImpl final : public SNSService::Service
 
             // Copy to slave
             if (type == MASTER) {
+                glog(INFO, "Copying to slave";)
                 slave_stream->Write(message_recv);
             }
 
@@ -528,7 +539,9 @@ class SNSServiceImpl final : public SNSService::Service
                     message_send.set_allocated_timestamp(timestamp);
 
                     // Send to client
-                    stream->Write(message_send);
+                    if (type == MASTER) {
+                        stream->Write(message_send);
+                    }
                     count++;
                 }
             }
@@ -546,12 +559,14 @@ class SNSServiceImpl final : public SNSService::Service
                 timestamp->set_nanos(0);
                 message_send.set_allocated_timestamp(timestamp);
 
-                // send post to followers
-                for (User *u : user->followers)
-                {
-                    if (u->stream != 0)
+                if (type == MASTER) {
+                    // send post to followers
+                    for (User *u : user->followers)
                     {
-                        u->stream->Write(message_send);
+                        if (u->stream != 0)
+                        {
+                            u->stream->Write(message_send);
+                        }
                     }
                 }
 

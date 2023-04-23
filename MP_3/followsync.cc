@@ -13,11 +13,13 @@
 #include <grpc++/grpc++.h>
 #include <glog/logging.h>
 #include <sys/stat.h>
-#define log(severity, msg) LOG(severity) << msg; google::FlushLogFiles(google::severity); 
+#include <thread>
+#define glog(severity, msg) LOG(severity) << msg; google::FlushLogFiles(google::severity); 
 
 #include "sns.grpc.pb.h"
 #include "coordinator.grpc.pb.h"
 #include "followsync.grpc.pb.h"
+#include "json.hpp"
 
 using google::protobuf::Timestamp;
 using google::protobuf::Duration;
@@ -42,12 +44,13 @@ using snsCoordinator::ServerType;
 using snsCoordinator::MASTER;
 using snsCoordinator::SLAVE;
 using snsCoordinator::SYNC;
+using json = nlohmann::ordered_json;
 
 // Coordinator stub
 std::unique_ptr<SNSCoordinator::Stub> coord_stub_;
 
 // Number of seconds for the syncer to check if any files have been updated
-int update_time = 30;
+int update_time = 10;
 
 std::string follow_location = "follow.json";
 std::string timeline_location = "timeline.json";
@@ -80,7 +83,7 @@ void send_heartbeat(int id, ServerType type, std::string ip, std::string port) {
     std::shared_ptr<ClientReaderWriter<Heartbeat, Heartbeat>> stream(coord_stub_->HandleHeartBeats(&ctx));
 
     // Create heartbeat
-    log(INFO, "Sending heartbeat");
+    glog(INFO, "Sending heartbeat");
 
     Heartbeat beat;
     beat.set_server_id(id);
@@ -98,6 +101,61 @@ void send_heartbeat(int id, ServerType type, std::string ip, std::string port) {
     stream->Finish();
 }
 
+void UpdateJSON(json j, std::string location)
+{
+    // glog(INFO, "Updating json");
+    std::ofstream ofs(location);
+    ofs << std::setw(4) << j << std::endl;
+    ofs.close();
+}
+
+// Add a new user to data.json
+void CreateUserJSON(std::string username)
+{
+    // Load data.json
+    std::ifstream file(follow_location);
+    json j = json::parse(file);
+    file.close();
+
+    // Create user object
+    json user_data;
+    user_data["username"] = username;
+    user_data["following"] = json::object();
+    j["users"][username] = user_data;
+
+    UpdateJSON(j, follow_location);
+}
+
+std::vector<int> ParseUsers(std::string location)
+{
+    std::vector<int> users;
+    std::ifstream file(location);
+    json j;
+
+    if (file.is_open())
+    {
+
+        // Check if file is empty
+        if (file.peek() == std::ifstream::traits_type::eof())
+        {
+            file.close();
+            return users;
+        }
+
+        // Parse json
+        j = json::parse(file);
+        file.close();
+
+        for (auto user_data : j["users"])
+        {
+            // Add all users to vector
+            std::string username = user_data["username"];
+            users.push_back(std::stoi(username));
+        }
+    }
+
+    return users;
+}
 
 void update_thread() {
     // Initialize last_update
@@ -122,7 +180,9 @@ void update_thread() {
         }
         if (previous_follow_mtime != ffile_stat.st_mtime) {
             // Reload follow data
-            glog(INFO, "Follow file change detected - loading data");
+            glog(INFO, "Follow file change detected");
+            // std::vector<int> users = ParseUsers(master_follow_location);
+
             previous_follow_mtime = ffile_stat.st_mtime;
         }
     }
@@ -139,7 +199,7 @@ void RunSync(std::string port_no) {
     builder.RegisterService(&service);
     std::unique_ptr<Server> server(builder.BuildAndStart());
     std::cout << "FollowSync listening on " << server_address << std::endl;
-    log(INFO, "FollowSync listening on "+server_address);
+    glog(INFO, "FollowSync listening on "+server_address);
 
     server->Wait();
 }
@@ -206,7 +266,7 @@ int main(int argc, char** argv) {
     // Send init heartbeat to coordinator
     send_heartbeat(std::stoi(id), SYNC, "0.0.0.0", port);
 
-    log(INFO, "Logging Initialized. FollowSync starting...");
+    glog(INFO, "Logging Initialized. FollowSync starting...");
     RunSync(port);
 
 
